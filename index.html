@@ -174,24 +174,28 @@
             const oldScript = document.getElementById('jsonp-script');
             if (oldScript) oldScript.remove();
 
-            window.handleSheetResponse = function(gvizData) {
+            window.google = window.google || {};
+            window.google.visualization = window.google.visualization || {};
+            window.google.visualization.Query = window.google.visualization.Query || {};
+            
+            window.google.visualization.Query.setResponse = function(gvizData) {
                 try {
                     if (!gvizData || !gvizData.table) {
-                        showError('فشل قراءة البيانات. تأكد من ضبط مشاركة الشيت Anyone with link - Viewer');
+                        showError('لم يتم العثور على بيانات. تحقق من صلاحيات مشاركة الشيت.');
                         return;
                     }
                     parseGvizTable(gvizData.table);
                     document.getElementById('last-updated').innerHTML = `<i class="fa-regular fa-clock me-1"></i> ${sheet.name} (تم التحديث: ${new Date().toLocaleTimeString('ar-EG')})`;
                 } catch (e) {
-                    showError('خطأ معالجة البيانات: ' + e.message);
+                    showError('حدث خطأ أثناء قراءة البيانات: ' + e.message);
                 }
             };
 
             const script = document.createElement('script');
             script.id = 'jsonp-script';
-            script.src = `https://docs.google.com/spreadsheets/d/${sheet.docId}/gviz/tq?tqx=responseHandler:handleSheetResponse&gid=${sheet.gid}`;
+            script.src = `https://docs.google.com/spreadsheets/d/${sheet.docId}/gviz/tq?gid=${sheet.gid}&tqx=out:json`;
             script.onerror = () => {
-                showError('تعذر تحميل البيانات. تأكد من الاتصال بالإنترنت أو أذونات الشيت.');
+                showError('تأكد من فتح صلاحية مشاركة الشيت لـ "Anyone with link" بصفة Viewer.');
                 document.getElementById('last-updated').innerHTML = `<i class="fa-solid fa-circle-exclamation text-red-400 me-1"></i> خطأ التحميل`;
             };
             document.body.appendChild(script);
