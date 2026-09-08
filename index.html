@@ -93,11 +93,12 @@
                             <th class="px-4 py-3 text-center">إجمالي الساعات</th>
                             <th class="px-4 py-3 text-center">الغياب</th>
                             <th class="px-4 py-3 text-center">الإيقاف</th>
+                            <th class="px-4 py-3 text-center text-gray-400">مش مختار</th>
                         </tr>
                     </thead>
                     <tbody id="table-body" class="divide-y divide-slate-700/50">
                         <tr>
-                            <td colspan="9" class="text-center py-6 text-slate-400"><i class="fa-solid fa-spinner fa-spin me-2"></i> جاري تحميل بيانات المناديب...</td>
+                            <td colspan="10" class="text-center py-6 text-slate-400"><i class="fa-solid fa-spinner fa-spin me-2"></i> جاري تحميل بيانات المناديب...</td>
                         </tr>
                     </tbody>
                 </table>
@@ -166,11 +167,11 @@
             if (zoneIdx === -1) zoneIdx = 2;
             if (supervisorIdx === -1) supervisorIdx = 3;
 
-            // دالة محسنة لتحويل أوقات Google Sheets وساعات الإكسيل بدقة إلى ثواني
+            // دالة التحويل المحسنة بدقة عالية للساعات والدقائق
             function convertToSeconds(cellVal) {
                 if (cellVal === null || cellVal === undefined) return 0;
 
-                // 1. إذا كانت القيمة تاريخ ISO مثل "1899-12-30T08:30:00.000Z"
+                // 1. القراءة من صيغ التواريخ ISO المشهورة في جوجل شيت
                 if (typeof cellVal === 'string' && cellVal.includes('T') && cellVal.includes('Z')) {
                     const timePart = cellVal.split('T')[1]?.split('.')[0];
                     if (timePart) {
@@ -182,7 +183,7 @@
                 const valStr = String(cellVal).trim();
                 if (!valStr || valStr === 'NaN' || valStr === '-' || valStr === '0') return 0;
 
-                // 2. إذا كانت الصيغة نصية مثل "HH:MM" أو "HH:MM:SS" (مثلاً "10:30" أو "105:15")
+                // 2. إذا كانت الصيغة نصية بتنسيق "HH:MM" أو "HH:MM:SS"
                 if (valStr.includes(':')) {
                     const parts = valStr.split(':').map(p => parseFloat(p) || 0);
                     if (parts.length >= 2) {
@@ -190,15 +191,13 @@
                     }
                 }
 
-                // 3. إذا كانت رقم (إما كسر يوم 0.25 = 6 ساعات، أو ساعات مباشرة مثل 8.5)
+                // 3. الأرقام العشرية (Google Sheets Time Serial Number)
                 const num = parseFloat(valStr);
                 if (!isNaN(num) && num > 0) {
-                    // إذا القيمة أصغر من 1 (تمثيل الوقت بالنظام العشري لجوجل شيت)
                     if (num < 1) {
-                        return Math.round(num * 86400); // 86400 ثانية في اليوم
+                        return Math.round(num * 86400); // تحويل كسر اليوم إلى ثواني
                     }
-                    // إذا كان الرقم يعبر عن الساعات مباشرة
-                    return Math.round(num * 3600);
+                    return Math.round(num * 3600); // الساعات كعدد صحيح/عشري
                 }
 
                 return 0;
@@ -217,14 +216,9 @@
 
                 if ((!riderId && !riderName) || riderId.toLowerCase() === 'rider id' || riderName.toLowerCase() === 'rider name') continue;
 
-                let workDays = 0, notWorkingDays = 0, absDays = 0, susDays = 0, totalHoursSec = 0;
+                let workDays = 0, notWorkingDays = 0, absDays = 0, susDays = 0, notSelectedDays = 0, totalHoursSec = 0;
 
-                // قراءة إجمالي الساعات إن كان موجوداً كعمود مستقل في الشيت
-                if (totalHoursIdx !== -1 && row[totalHoursIdx] !== undefined) {
-                    totalHoursSec = convertToSeconds(row[totalHoursIdx]);
-                }
-
-                // تجميع بيانات الساعات من الأعمدة اليومية التفصيلية
+                // تجميع بيانات الأيام الحالية
                 for (let i = 4; i < row.length; i++) {
                     if (i === totalHoursIdx) continue;
                     const cellVal = row[i];
@@ -241,21 +235,25 @@
                         notWorkingDays++; 
                     }
                     else if (val.includes('مش مختار')) { 
+                        notSelectedDays++;
                         notWorkingDays++; 
                     }
                     else {
                         const sec = convertToSeconds(cellVal);
                         if (sec > 0) {
                             workDays++;
-                            // إذا لم ينوجد عمود الإجمالي يجرى تجميعه تلقائياً من الأيام
-                            if (totalHoursIdx === -1) {
-                                totalHoursSec += sec;
-                            }
+                            totalHoursSec += sec;
                         }
                     }
                 }
 
-                // تحويل الثواني المجمعة إلى ساعات ودقائق بأسلوب دقيق
+                // إذا وجد عمود الإجمالي في الشيت كعمود مخصص
+                if (totalHoursIdx !== -1 && row[totalHoursIdx] !== undefined) {
+                    const sheetTotalSec = convertToSeconds(row[totalHoursIdx]);
+                    if (sheetTotalSec > 0) totalHoursSec = sheetTotalSec;
+                }
+
+                // تحويل إجمالي الثواني لساعات ودقائق
                 const totalMinsTotal = Math.round(totalHoursSec / 60);
                 const hours = Math.floor(totalMinsTotal / 60);
                 const mins = totalMinsTotal % 60;
@@ -270,7 +268,8 @@
                     "إجمالي الساعات": `${hours}:${mins < 10 ? '0' : ''}${mins}`,
                     "ساعات بالثواني": totalHoursSec,
                     "الغياب": absDays,
-                    "الإيقاف": susDays
+                    "الإيقاف": susDays,
+                    "مش مختار": notSelectedDays
                 });
             }
 
@@ -364,7 +363,7 @@
             tbody.innerHTML = '';
 
             if (filteredData.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="9" class="text-center py-6 text-slate-500">لا توجد بيانات مطابقة.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="10" class="text-center py-6 text-slate-500">لا توجد بيانات مطابقة.</td></tr>`;
                 return;
             }
 
@@ -381,6 +380,7 @@
                     <td class="px-4 py-3 text-center font-mono text-emerald-400 font-bold">${item["إجمالي الساعات"]}</td>
                     <td class="px-4 py-3 text-center text-slate-300">${item["الغياب"]}</td>
                     <td class="px-4 py-3 text-center text-slate-300">${item["الإيقاف"]}</td>
+                    <td class="px-4 py-3 text-center text-slate-400">${item["مش مختار"]}</td>
                 `;
                 tbody.appendChild(tr);
             });
