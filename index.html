@@ -6,7 +6,6 @@
     <title>داشبورد متابعة الأداء والتارجت اليومي</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap');
@@ -22,7 +21,7 @@
                 <h1 class="text-xl font-bold">داشبورد متابعة الأداء والتارجت اليومي</h1>
             </div>
             <div id="last-updated" class="text-xs bg-slate-700 px-3 py-1 rounded-full text-slate-300">
-                <i class="fa-solid fa-spinner fa-spin me-1"></i> جاري تحميل البيانات...
+                <i class="fa-solid fa-spinner fa-spin me-1"></i> جاري جلب البيانات...
             </div>
         </div>
     </header>
@@ -31,7 +30,7 @@
 
         <div id="error-banner" class="hidden bg-red-900/50 border border-red-500 text-red-200 p-4 rounded-xl text-sm">
             <i class="fa-solid fa-triangle-exclamation text-red-400 me-2"></i>
-            <span id="error-msg">حدث خطأ أثناء تحميل الشيت.</span>
+            <span id="error-msg">حدث خطأ أثناء تحميل البيانات.</span>
         </div>
 
         <div class="bg-slate-800 p-2 rounded-xl border border-slate-700 flex flex-wrap gap-2" id="sheets-nav-container"></div>
@@ -107,18 +106,21 @@
     </div>
 
     <script>
+        // إعداد الشيتات باستخدام معرّف Document ID و GID المباشر لتجاوز CORS
         const SHEETS_CONFIG = [
             {
                 id: 'sheet_performance',
                 name: 'تقرير الأداء الرئيسي',
                 icon: 'fa-chart-line',
-                url: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQuC0_Wat8ldoeyQIpyDLitB6HTwggTwBCEBlaMhxLqXjUbF8USdV1wYoq6sFrlR0m1i8pYH_WOcdbS/pub?gid=2039215920&single=true&output=csv'
+                docId: '1QuC0_Wat8ldoeyQIpyDLitB6HTwggTwBCEBlaMhxLqXjUbF8USdV1wYoq6sFrlR0m1i8pYH_WOcdbS',
+                gid: '2039215920'
             },
             {
                 id: 'sheet_daily_target',
                 name: 'التارجت اليومي',
                 icon: 'fa-bullseye',
-                url: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQJcnDyqkCd9Vnuz25FpZ2ZMoF8qJbJ5VruRZyVMr1JdJtjY0dWokxQo6u-h7KRdJB-u9GFUYaEJjD_/pub?gid=0&single=true&output=csv'
+                docId: '1QcnDyqkCd9Vnuz25FpZ2ZMoF8qJbJ5VruRZyVMr1JdJtjY0dWokxQo6u-h7KRdJB-u9GFUYaEJjD_',
+                gid: '0'
             }
         ];
 
@@ -135,27 +137,20 @@
             "أداء ضعيف (ساعات قليلة)": []
         };
 
-        function hideError() {
-            document.getElementById('error-banner').classList.add('hidden');
-        }
-
+        function hideError() { document.getElementById('error-banner').classList.add('hidden'); }
         function showError(msg) {
-            const errBanner = document.getElementById('error-banner');
             document.getElementById('error-msg').innerText = msg;
-            errBanner.classList.remove('hidden');
+            document.getElementById('error-banner').classList.remove('hidden');
         }
 
         function renderSheetsNav() {
             const container = document.getElementById('sheets-nav-container');
             container.innerHTML = '';
-
             SHEETS_CONFIG.forEach(sheet => {
                 const isActive = sheet.id === activeSheetId;
                 const btn = document.createElement('button');
                 btn.className = `flex items-center gap-2 px-5 py-2.5 rounded-lg font-bold text-sm transition-all ${
-                    isActive 
-                    ? 'bg-amber-500 text-slate-900 shadow-lg shadow-amber-500/20' 
-                    : 'bg-slate-700/50 text-slate-300 hover:bg-slate-700 hover:text-white'
+                    isActive ? 'bg-amber-500 text-slate-900 shadow-lg shadow-amber-500/20' : 'bg-slate-700/50 text-slate-300 hover:bg-slate-700 hover:text-white'
                 }`;
                 btn.innerHTML = `<i class="fa-solid ${sheet.icon}"></i> ${sheet.name}`;
                 btn.onclick = () => switchSheet(sheet.id);
@@ -167,65 +162,61 @@
             activeSheetId = sheetId;
             currentTabCategory = "كل البيانات";
             renderSheetsNav();
-            loadActiveSheetData();
+            loadSheetViaScript();
         }
 
-        async function fetchCSV(url) {
-            const proxyUrls = [
-                url,
-                'https://api.allorigins.win/raw?url=' + encodeURIComponent(url),
-                'https://corsproxy.io/?' + encodeURIComponent(url)
-            ];
-
-            for (let proxyUrl of proxyUrls) {
-                try {
-                    const res = await fetch(proxyUrl);
-                    if (res.ok) {
-                        const text = await res.text();
-                        if (text && text.length > 20) return text;
-                    }
-                } catch (e) {
-                    console.warn('Proxy failed:', proxyUrl, e);
-                }
-            }
-            throw new Error('فشل جلب بيانات CSV من الشيت.');
-        }
-
-        async function loadActiveSheetData() {
+        function loadSheetViaScript() {
             hideError();
             const sheet = SHEETS_CONFIG.find(s => s.id === activeSheetId);
             if (!sheet) return;
 
             document.getElementById('last-updated').innerHTML = `<i class="fa-solid fa-spinner fa-spin me-1"></i> جاري تحميل ${sheet.name}...`;
 
-            try {
-                const csvText = await fetchCSV(sheet.url);
-                
-                Papa.parse(csvText, {
-                    header: true,
-                    skipEmptyLines: true,
-                    complete: function(results) {
-                        if (results.data && results.data.length > 0) {
-                            processSheetData(results.data);
-                            document.getElementById('last-updated').innerHTML = `<i class="fa-regular fa-clock me-1"></i> ${sheet.name} (تم التحديث: ${new Date().toLocaleTimeString('ar-EG')})`;
-                        } else {
-                            showError('الشيت فارغ أو لا يحتوي على صفوف بيانات.');
-                        }
-                    },
-                    error: function(err) {
-                        showError('خطأ أثناء قراءة ملف CSV: ' + err.message);
-                    }
-                });
-            } catch (err) {
-                console.error(err);
-                showError(err.message);
-                document.getElementById('last-updated').innerHTML = `<i class="fa-solid fa-circle-exclamation text-red-400 me-1"></i> خطأ في التحميل`;
-            }
+            // إزالة السكريبت القديم إن وجد
+            const oldScript = document.getElementById('gsheet-script');
+            if (oldScript) oldScript.remove();
+
+            // إنشاء سكريبت JSONP يتخطى CORS تماماً
+            const script = document.createElement('script');
+            script.id = 'gsheet-script';
+            script.src = `https://docs.google.com/spreadsheets/d/${sheet.docId}/gviz/tq?tqx=responseHandler:handleGvizData&gid=${sheet.gid}`;
+            script.onerror = () => {
+                showError('تعذر تحميل البيانات من جوجل شيت. تأكد من إعدادات مشاركة الشيت.');
+                document.getElementById('last-updated').innerHTML = `<i class="fa-solid fa-circle-exclamation text-red-400 me-1"></i> خطأ التحميل`;
+            };
+            document.body.appendChild(script);
         }
 
+        // Global callback handler لجوجل شيت
+        window.handleGvizData = function(gvizData) {
+            try {
+                if (!gvizData || !gvizData.table) {
+                    showError('البيانات المستلمة غير صالحة.');
+                    return;
+                }
+
+                const cols = gvizData.table.cols.map(c => (c ? c.label || '' : ''));
+                const rows = gvizData.table.rows.map(r => {
+                    let rowObj = {};
+                    r.c.forEach((cell, idx) => {
+                        const colName = cols[idx] || `col_${idx}`;
+                        rowObj[colName] = cell ? (cell.v !== null && cell.v !== undefined ? cell.v : '') : '';
+                    });
+                    return rowObj;
+                });
+
+                const sheet = SHEETS_CONFIG.find(s => s.id === activeSheetId);
+                processSheetData(rows);
+                document.getElementById('last-updated').innerHTML = `<i class="fa-regular fa-clock me-1"></i> ${sheet.name} (تم التحديث: ${new Date().toLocaleTimeString('ar-EG')})`;
+            } catch (err) {
+                console.error(err);
+                showError('حدث خطأ أثناء معالجة البيانات: ' + err.message);
+            }
+        };
+
         function getValue(row, keys) {
-            for (let k of keys) {
-                for (let rKey in row) {
+            for (let rKey in row) {
+                for (let k of keys) {
                     if (rKey.trim().toLowerCase().includes(k.toLowerCase())) {
                         return row[rKey];
                     }
@@ -250,7 +241,7 @@
                 const workDays = parseNum(getValue(row, ['عمل', 'work', 'أيام']));
                 const offDays = parseNum(getValue(row, ['غياب', 'عدم', 'off']));
                 const avgHours = getValue(row, ['ساعات', 'hours', 'متوسط']) || '0';
-                const absRecorded = parseNum(getValue(row, ['الغياب المسجل', 'absent', 'غياب']));
+                const absRecorded = parseNum(getValue(row, ['الغياب المسجل', 'absent']));
                 const suspendedDays = parseNum(getValue(row, ['إيقاف', 'ايقاف', 'suspended']));
 
                 const item = {
@@ -265,10 +256,7 @@
                     "عدد أيام الإيقاف": suspendedDays
                 };
 
-                // إضافة كل البيانات للجدول الأساسي
                 rawData["كل البيانات"].push(item);
-
-                // توزيع الحالات
                 if (workDays === 0) rawData["مش شغال خالص (7 أيام)"].push(item);
                 if (suspendedDays > 0) rawData["موقوف"].push(item);
                 if (absRecorded > 0) rawData["غياب متكرر"].push(item);
@@ -384,7 +372,7 @@
         document.getElementById('search-input').addEventListener('input', renderTable);
         
         renderSheetsNav();
-        loadActiveSheetData();
+        loadSheetViaScript();
     </script>
 </body>
 </html>
