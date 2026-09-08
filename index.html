@@ -30,6 +30,12 @@
 
     <div class="container mx-auto p-4 md:p-6 space-y-6">
 
+        <!-- Error Alert Container -->
+        <div id="error-banner" class="hidden bg-red-900/50 border border-red-500 text-red-200 p-4 rounded-xl text-sm">
+            <i class="fa-solid fa-triangle-exclamation text-red-400 me-2"></i>
+            <span id="error-msg">حدث خطأ أثناء تحميل الشيت.</span>
+        </div>
+
         <!-- Sheet Switcher Tabs -->
         <div class="bg-slate-800 p-2 rounded-xl border border-slate-700 flex flex-wrap gap-2" id="sheets-nav-container"></div>
 
@@ -134,6 +140,16 @@
             "أداء ضعيف (ساعات قليلة)": []
         };
 
+        function hideError() {
+            document.getElementById('error-banner').classList.add('hidden');
+        }
+
+        function showError(msg) {
+            const errBanner = document.getElementById('error-banner');
+            document.getElementById('error-msg').innerText = msg;
+            errBanner.classList.remove('hidden');
+        }
+
         function renderSheetsNav() {
             const container = document.getElementById('sheets-nav-container');
             container.innerHTML = '';
@@ -158,25 +174,58 @@
             loadActiveSheetData();
         }
 
-        function loadActiveSheetData() {
+        async function fetchCSV(url) {
+            // محاولة التحميل المباشر أولاً ثم عبر البروكسي عند الحظر
+            const proxyUrls = [
+                url,
+                'https://api.allorigins.win/raw?url=' + encodeURIComponent(url),
+                'https://corsproxy.io/?' + encodeURIComponent(url)
+            ];
+
+            for (let proxyUrl of proxyUrls) {
+                try {
+                    const res = await fetch(proxyUrl);
+                    if (res.ok) {
+                        const text = await res.text();
+                        if (text && text.length > 20) return text;
+                    }
+                } catch (e) {
+                    console.warn('Proxy failed:', proxyUrl, e);
+                }
+            }
+            throw new Error('فشل جلب بيانات CSV من الشيت، تأكد من أن الشيت منشور للويب (Publish to web) بصيغة CSV.');
+        }
+
+        async function loadActiveSheetData() {
+            hideError();
             const sheet = SHEETS_CONFIG.find(s => s.id === activeSheetId);
             if (!sheet) return;
 
             document.getElementById('last-updated').innerHTML = `<i class="fa-solid fa-spinner fa-spin me-1"></i> جاري تحميل ${sheet.name}...`;
 
-            Papa.parse(sheet.url, {
-                download: true,
-                header: true,
-                skipEmptyLines: true,
-                complete: function(results) {
-                    processSheetData(results.data);
-                    document.getElementById('last-updated').innerHTML = `<i class="fa-regular fa-clock me-1"></i> ${sheet.name} (تم التحديث: ${new Date().toLocaleTimeString('ar-EG')})`;
-                },
-                error: function(err) {
-                    console.error("خطأ أثناء جلب البيانات:", err);
-                    document.getElementById('last-updated').innerHTML = `<i class="fa-solid fa-circle-exclamation text-red-400 me-1"></i> فشل جلب البيانات`;
-                }
-            });
+            try {
+                const csvText = await fetchCSV(sheet.url);
+                
+                Papa.parse(csvText, {
+                    header: true,
+                    skipEmptyLines: true,
+                    complete: function(results) {
+                        if (results.data && results.data.length > 0) {
+                            processSheetData(results.data);
+                            document.getElementById('last-updated').innerHTML = `<i class="fa-regular fa-clock me-1"></i> ${sheet.name} (تم التحديث: ${new Date().toLocaleTimeString('ar-EG')})`;
+                        } else {
+                            showError('الشيت فارغ أو لا يحتوي على صفوف بيانات.');
+                        }
+                    },
+                    error: function(err) {
+                        showError('خطأ أثناء قراءة ملف CSV: ' + err.message);
+                    }
+                });
+            } catch (err) {
+                console.error(err);
+                showError(err.message);
+                document.getElementById('last-updated').innerHTML = `<i class="fa-solid fa-circle-exclamation text-red-400 me-1"></i> خطأ في التحميل`;
+            }
         }
 
         function getValue(row, keys) {
