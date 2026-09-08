@@ -161,125 +161,121 @@
             activeSheetId = sheetId;
             currentTabCategory = "كل البيانات";
             renderSheetsNav();
-            loadSheetViaScript();
+            loadSheetData();
         }
 
-        function loadSheetViaScript() {
+        async function loadSheetData() {
             hideError();
             const sheet = SHEETS_CONFIG.find(s => s.id === activeSheetId);
             if (!sheet) return;
 
             document.getElementById('last-updated').innerHTML = `<i class="fa-solid fa-spinner fa-spin me-1"></i> جاري تحميل ${sheet.name}...`;
 
-            const oldScript = document.getElementById('gsheet-script');
-            if (oldScript) oldScript.remove();
+            const url = `https://docs.google.com/spreadsheets/d/${sheet.docId}/gviz/tq?tqx=out:json&gid=${sheet.gid}`;
 
-            const script = document.createElement('script');
-            script.id = 'gsheet-script';
-            script.src = `https://docs.google.com/spreadsheets/d/${sheet.docId}/gviz/tq?tqx=responseHandler:handleGvizData&gid=${sheet.gid}`;
-            script.onerror = () => {
-                showError('تعذر تحميل البيانات من جوجل شيت.');
-                document.getElementById('last-updated').innerHTML = `<i class="fa-solid fa-circle-exclamation text-red-400 me-1"></i> خطأ التحميل`;
-            };
-            document.body.appendChild(script);
-        }
-
-        window.handleGvizData = function(gvizData) {
             try {
-                if (!gvizData || !gvizData.table) {
-                    showError('البيانات غير صالحة.');
-                    return;
-                }
+                const response = await fetch(url);
+                if (!response.ok) throw new Error('فشل الاتصال بالشيت. تأكد من إعدادات المشاركة.');
+                
+                const text = await response.text();
+                // تنظيف الـ JSON المنقول من Google
+                const jsonText = text.substring(text.indexOf('{'), text.lastIndexOf('}') + 1);
+                const gvizData = JSON.parse(jsonText);
 
-                // قراءة الصفوف العادية
-                const cols = gvizData.table.cols.map(c => (c ? c.label || '' : ''));
-                const rawRows = gvizData.table.rows;
-
-                // مطابقة عناوين الأعمدة بناءً على الصورة
-                let riderIdIdx = cols.findIndex(c => c.toLowerCase().includes('rider id') || c.includes('كود'));
-                let riderNameIdx = cols.findIndex(c => c.toLowerCase().includes('rider name') || c.includes('اسم'));
-                let zoneIdx = cols.findIndex(c => c.toLowerCase().includes('zone') || c.includes('منطقة'));
-                let supervisorIdx = cols.findIndex(c => c.includes('المشرف') || c.toLowerCase().includes('supervisor'));
-
-                if (riderIdIdx === -1) riderIdIdx = 0;
-                if (riderNameIdx === -1) riderNameIdx = 1;
-                if (zoneIdx === -1) zoneIdx = 2;
-                if (supervisorIdx === -1) supervisorIdx = 3;
-
-                let parsedData = [];
-
-                rawRows.forEach(r => {
-                    if (!r.c) return;
-                    
-                    const riderId = r.c[riderIdIdx] ? r.c[riderIdIdx].v : '';
-                    const riderName = r.c[riderNameIdx] ? r.c[riderNameIdx].v : '';
-                    const zone = r.c[zoneIdx] ? r.c[zoneIdx].v : '';
-                    const supervisor = r.c[supervisorIdx] ? r.c[supervisorIdx].v : '';
-
-                    if (!riderId && !riderName) return;
-
-                    let workDays = 0;
-                    let notWorkingDays = 0;
-                    let absDays = 0;
-                    let susDays = 0;
-                    let totalHoursSec = 0;
-
-                    // مسح باقي أعمدة التواريخ (ابتداءً من العمود رقم 4)
-                    for (let i = 4; i < r.c.length; i++) {
-                        const cell = r.c[i];
-                        if (!cell || cell.v === null || cell.v === undefined) continue;
-
-                        const val = String(cell.v).trim();
-                        const formatted = cell.f || val;
-
-                        if (val === 'غياب' || formatted.includes('غياب')) {
-                            absDays++;
-                            notWorkingDays++;
-                        } else if (val === 'موقوف' || formatted.includes('موقوف')) {
-                            susDays++;
-                            notWorkingDays++;
-                        } else if (val === 'مش مختار' || formatted.includes('مش مختار')) {
-                            notWorkingDays++;
-                        } else if (typeof cell.v === 'number' || val.includes(':')) {
-                            // حساب الساعات
-                            workDays++;
-                            if (typeof cell.v === 'number') {
-                                totalHoursSec += cell.v * 86400; // تحويل من كسور تاريخ إلى ثواني
-                            } else {
-                                const parts = val.split(':').map(Number);
-                                if (parts.length >= 2) {
-                                    totalHoursSec += (parts[0] * 3600) + (parts[1] * 60) + (parts[2] || 0);
-                                }
-                            }
-                        }
-                    }
-
-                    const hours = Math.floor(totalHoursSec / 3600);
-                    const mins = Math.floor((totalHoursSec % 3600) / 60);
-                    const formattedHours = `${hours}:${mins < 10 ? '0' : ''}${mins}`;
-
-                    parsedData.push({
-                        "كود المندوب": riderId,
-                        "الاسم": riderName,
-                        "المنطقة": zone,
-                        "المشرف": supervisor,
-                        "أيام العمل": workDays,
-                        "أيام عدم العمل": notWorkingDays,
-                        "إجمالي الساعات": formattedHours,
-                        "ساعات بالثواني": totalHoursSec,
-                        "الغياب": absDays,
-                        "الإيقاف": susDays
-                    });
-                });
-
-                processSheetData(parsedData);
-                const sheet = SHEETS_CONFIG.find(s => s.id === activeSheetId);
+                parseGvizTable(gvizData.table);
                 document.getElementById('last-updated').innerHTML = `<i class="fa-regular fa-clock me-1"></i> ${sheet.name} (تم التحديث: ${new Date().toLocaleTimeString('ar-EG')})`;
             } catch (err) {
                 console.error(err);
-                showError('حدث خطأ أثناء معالجة بيانات الشيت: ' + err.message);
+                showError('خطأ أثناء تحميل البيانات: ' + err.message);
+                document.getElementById('last-updated').innerHTML = `<i class="fa-solid fa-circle-exclamation text-red-400 me-1"></i> خطأ التحميل`;
             }
-        };
+        }
+
+        function parseGvizTable(table) {
+            if (!table || !table.rows) {
+                showError('لا توجد بيانات داخل الشيت.');
+                return;
+            }
+
+            const cols = table.cols.map(c => (c ? c.label || '' : ''));
+            const rawRows = table.rows;
+
+            let riderIdIdx = cols.findIndex(c => c.toLowerCase().includes('rider id') || c.includes('كود'));
+            let riderNameIdx = cols.findIndex(c => c.toLowerCase().includes('rider name') || c.includes('اسم'));
+            let zoneIdx = cols.findIndex(c => c.toLowerCase().includes('zone') || c.includes('منطقة'));
+            let supervisorIdx = cols.findIndex(c => c.includes('المشرف') || c.toLowerCase().includes('supervisor'));
+
+            if (riderIdIdx === -1) riderIdIdx = 0;
+            if (riderNameIdx === -1) riderNameIdx = 1;
+            if (zoneIdx === -1) zoneIdx = 2;
+            if (supervisorIdx === -1) supervisorIdx = 3;
+
+            let parsedData = [];
+
+            rawRows.forEach(r => {
+                if (!r.c) return;
+                
+                const riderId = r.c[riderIdIdx] ? r.c[riderIdIdx].v : '';
+                const riderName = r.c[riderNameIdx] ? r.c[riderNameIdx].v : '';
+                const zone = r.c[zoneIdx] ? r.c[zoneIdx].v : '';
+                const supervisor = r.c[supervisorIdx] ? r.c[supervisorIdx].v : '';
+
+                if (!riderId && !riderName) return;
+
+                let workDays = 0;
+                let notWorkingDays = 0;
+                let absDays = 0;
+                let susDays = 0;
+                let totalHoursSec = 0;
+
+                for (let i = 4; i < r.c.length; i++) {
+                    const cell = r.c[i];
+                    if (!cell || cell.v === null || cell.v === undefined) continue;
+
+                    const val = String(cell.v).trim();
+                    const formatted = cell.f || val;
+
+                    if (val === 'غياب' || formatted.includes('غياب')) {
+                        absDays++;
+                        notWorkingDays++;
+                    } else if (val === 'موقوف' || formatted.includes('موقوف')) {
+                        susDays++;
+                        notWorkingDays++;
+                    } else if (val === 'مش مختار' || formatted.includes('مش مختار')) {
+                        notWorkingDays++;
+                    } else if (typeof cell.v === 'number' || val.includes(':')) {
+                        workDays++;
+                        if (typeof cell.v === 'number') {
+                            totalHoursSec += cell.v * 86400;
+                        } else {
+                            const parts = val.split(':').map(Number);
+                            if (parts.length >= 2) {
+                                totalHoursSec += (parts[0] * 3600) + (parts[1] * 60) + (parts[2] || 0);
+                            }
+                        }
+                    }
+                }
+
+                const hours = Math.floor(totalHoursSec / 3600);
+                const mins = Math.floor((totalHoursSec % 3600) / 60);
+                const formattedHours = `${hours}:${mins < 10 ? '0' : ''}${mins}`;
+
+                parsedData.push({
+                    "كود المندوب": riderId,
+                    "الاسم": riderName,
+                    "المنطقة": zone,
+                    "المشرف": supervisor,
+                    "أيام العمل": workDays,
+                    "أيام عدم العمل": notWorkingDays,
+                    "إجمالي الساعات": formattedHours,
+                    "ساعات بالثواني": totalHoursSec,
+                    "الغياب": absDays,
+                    "الإيقاف": susDays
+                });
+            });
+
+            processSheetData(parsedData);
+        }
 
         function processSheetData(items) {
             Object.keys(rawData).forEach(key => rawData[key] = []);
@@ -401,7 +397,7 @@
         document.getElementById('search-input').addEventListener('input', renderTable);
         
         renderSheetsNav();
-        loadSheetViaScript();
+        loadSheetData();
     </script>
 </body>
 </html>
