@@ -3,9 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>داشبورد تقرير الأداء الضعيف</title>
+    <title>داشبورد تقرير الأداء والإنتاجية - بث مباشر</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap');
@@ -18,10 +19,10 @@
         <div class="container mx-auto flex justify-between items-center">
             <div class="flex items-center gap-3">
                 <i class="fa-solid fa-chart-line text-amber-500 text-2xl"></i>
-                <h1 class="text-xl font-bold">داشبورد تقرير الأداء والإنتاجية (محدث)</h1>
+                <h1 class="text-xl font-bold">داشبورد تقرير الأداء والإنتاجية (مربوط مباشر)</h1>
             </div>
-            <div class="text-sm bg-slate-700 px-3 py-1 rounded-full text-slate-300">
-                <i class="fa-regular fa-clock me-1"></i> تم تحديث البيانات بالكامل
+            <div id="last-updated" class="text-xs bg-slate-700 px-3 py-1 rounded-full text-slate-300">
+                <i class="fa-solid fa-spinner fa-spin me-1"></i> جاري تحميل البيانات من شيت جوجل...
             </div>
         </div>
     </header>
@@ -90,7 +91,11 @@
                             <th class="px-4 py-3 text-center">أيام الإيقاف</th>
                         </tr>
                     </thead>
-                    <tbody id="table-body" class="divide-y divide-slate-700/50"></tbody>
+                    <tbody id="table-body" class="divide-y divide-slate-700/50">
+                        <tr>
+                            <td colspan="9" class="text-center py-6 text-slate-400"><i class="fa-solid fa-spinner fa-spin me-2"></i> جاري تحميل البيانات...</td>
+                        </tr>
+                    </tbody>
                 </table>
             </div>
         </div>
@@ -98,129 +103,151 @@
     </div>
 
     <script>
-        const rawData = {
-            "مش شغال خالص (7 أيام)": [
-                {"كود المندوب": 4704619, "الاسم": "Medhat Ahmed Mohamed Morsi _JASSON", "المنطقة": "Helwan", "المشرف": "Kareemeesa", "أيام العمل": 0, "أيام الغياب/عدم العمل": 7, "متوسط ساعات العمل": "-", "عدد أيام الغياب المسجل": 0, "عدد أيام الإيقاف": 0},
-                {"كود المندوب": 4765692, "الاسم": "Mahmoud Afifi Zohdi Mohamed _JASSON", "المنطقة": "Helwan", "المشرف": "Kareemeesa", "أيام العمل": 0, "أيام الغياب/عدم العمل": 7, "متوسط ساعات العمل": "-", "عدد أيام الغياب المسجل": 1, "عدد أيام الإيقاف": 0},
-                {"كود المندوب": 1497386, "الاسم": "Mostafa Mohamed Abdelkhalek _JASSON", "المنطقة": "Maadi", "المشرف": "Zanaty", "أيام العمل": 0, "أيام الغياب/عدم العمل": 7, "متوسط ساعات العمل": "-", "عدد أيام الغياب المسجل": 6, "عدد أيام الإيقاف": 0},
-                {"كود المندوب": 3793256, "الاسم": "Adel Mekhael Mourice Ibrahim _JASSON", "المنطقة": "Maadi", "المشرف": "Kareemeesa", "أيام العمل": 0, "أيام الغياب/عدم العمل": 7, "متوسط ساعات العمل": "-", "عدد أيام الغياب المسجل": 0, "عدد أيام الإيقاف": 0},
-                {"كود المندوب": 4848265, "الاسم": "Tarik Walid Othman Abdelbarr _JASSON", "المنطقة": "Maadi", "المشرف": "Kareemeesa", "أيام العمل": 0, "أيام الغياب/عدم العمل": 7, "متوسط ساعات العمل": "-", "عدد أيام الغياب المسجل": 0, "عدد أيام الإيقاف": 0}
-            ],
-            "موقوف": [
-                {"كود المندوب": 2056364, "الاسم": "Islam Ibrahim Radwan Mohamad _Jasson", "المنطقة": "Helwan", "المشرف": "Kareemeesa", "أيام العمل": 5, "أيام الغياب/عدم العمل": 2, "متوسط ساعات العمل": 7.46, "عدد أيام الغياب المسجل": 0, "عدد أيام الإيقاف": 2},
-                {"كود المندوب": 4172893, "الاسم": "Hassan Hamada Mohammed Ahmed _JASSON", "المنطقة": "Helwan", "المشرف": "Kareemeesa", "أيام العمل": 3, "أيام الغياب/عدم العمل": 4, "متوسط ساعات العمل": 8.35, "عدد أيام الغياب المسجل": 0, "عدد أيام الإيقاف": 1},
-                {"كود المندوب": 2041542, "الاسم": "Muhammad Khaled Hanafi Mahrous _Jasson", "المنطقة": "Maadi", "المشرف": "Ahmed Mostafa", "أيام العمل": 3, "أيام الغياب/عدم العمل": 4, "متوسط ساعات العمل": 10.45, "عدد أيام الغياب المسجل": 0, "عدد أيام الإيقاف": 1}
-            ],
-            "غياب متكرر": [
-                {"كود المندوب": 2129695, "الاسم": "Ibrahim Eid Ibrahim Narwz _JASSON", "المنطقة": "Maadi", "المشرف": "Ahmed Mostafa", "أيام العمل": 2, "أيام الغياب/عدم العمل": 5, "متوسط ساعات العمل": 3.85, "عدد أيام الغياب المسجل": 2, "عدد أيام الإيقاف": 0},
-                {"كود المندوب": 797809, "الاسم": "Ibrahim Ahmed Osman_Jasson", "المنطقة": "Maadi", "المشرف": "Zanaty", "أيام العمل": 1, "أيام الغياب/عدم العمل": 6, "متوسط ساعات العمل": 5.10, "عدد أيام الغياب المسجل": 3, "عدد أيام الإيقاف": 0},
-                {"كود المندوب": 1497386, "الاسم": "Mostafa Mohamed Abdelkhalek _JASSON", "المنطقة": "Maadi", "المشرف": "Zanaty", "أيام العمل": 0, "أيام الغياب/عدم العمل": 7, "متوسط ساعات العمل": "-", "عدد أيام الغياب المسجل": 6, "عدد أيام الإيقاف": 0},
-                {"كود المندوب": 1311386, "الاسم": "Youssef Ayman Abdelhamed Mahmoud _JASSON_BC", "المنطقة": "Maadi", "المشرف": "Ahmed Mostafa", "أيام العمل": 3, "أيام الغياب/عدم العمل": 4, "متوسط ساعات العمل": 3.28, "عدد أيام الغياب المسجل": 2, "عدد أيام الإيقاف": 0},
-                {"كود المندوب": 1363378, "الاسم": "Mohamed Abdelbasat Said Hachim _JASSON", "المنطقة": "Maadi", "المشرف": "Ahmed Mostafa", "أيام العمل": 3, "أيام الغياب/عدم العمل": 4, "متوسط ساعات العمل": 7.50, "عدد أيام الغياب المسجل": 2, "عدد أيام الإيقاف": 0},
-                {"كود المندوب": 1172496, "الاسم": "Karim Walid Mohamed Fahmy _JASSON", "المنطقة": "Maadi", "المشرف": "Ahmed Mostafa", "أيام العمل": 4, "أيام الغياب/عدم العمل": 3, "متوسط ساعات العمل": 5.80, "عدد أيام الغياب المسجل": 2, "عدد أيام الإيقاف": 0},
-                {"كود المندوب": 4321605, "الاسم": "Atef Ahmed Elleissi Ismail _JASSON", "المنطقة": "Maadi", "المشرف": "Ahmed Mostafa", "أيام العمل": 2, "أيام الغياب/عدم العمل": 5, "متوسط ساعات العمل": 13.26, "عدد أيام الغياب المسجل": 2, "عدد أيام الإيقاف": 0}
-            ],
-            "أيام عمل قليلة (1-2)": [
-                {"كود المندوب": 2011749, "الاسم": "Muhammad Abdullah Muhammad Mohammed _JASSON", "المنطقة": "Helwan", "المشرف": "Kareemeesa", "أيام العمل": 2, "أيام الغياب/عدم العمل": 5, "متوسط ساعات العمل": 4.92, "عدد أيام الغياب المسجل": 0, "عدد أيام الإيقاف": 0},
-                {"كود المندوب": 2131514, "الاسم": "Muhammad Ali Muhammad _Jasson", "المنطقة": "Helwan", "المشرف": "Kareemeesa", "أيام العمل": 2, "أيام الغياب/عدم العمل": 5, "متوسط ساعات العمل": 5.58, "عدد أيام الغياب المسجل": 0, "عدد أيام الإيقاف": 0},
-                {"كود المندوب": 2140184, "الاسم": "Ahmed Mohamed Farag _JASSON", "المنطقة": "Helwan", "المشرف": "Kareemeesa", "أيام العمل": 2, "أيام الغياب/عدم العمل": 5, "متوسط ساعات العمل": 6.82, "عدد أيام الغياب المسجل": 0, "عدد أيام الإيقاف": 0},
-                {"كود المندوب": 3504437, "الاسم": "Omar Mohamad Jaber Abdo _JASSON", "المنطقة": "Helwan", "المشرف": "Kareemeesa", "أيام العمل": 1, "أيام الغياب/عدم العمل": 6, "متوسط ساعات العمل": 5.73, "عدد أيام الغياب المسجل": 0, "عدد أيام الإيقاف": 0},
-                {"كود المندوب": 3668304, "الاسم": "Ahmed Khaled Abdelmawgoud Jaber_JASSON", "المنطقة": "Helwan", "المشرف": "Kareemeesa", "أيام العمل": 2, "أيام الغياب/عدم العمل": 5, "متوسط ساعات العمل": 6.89, "عدد أيام الغياب المسجل": 0, "عدد أيام الإيقاف": 0},
-                {"كود المندوب": 2129695, "الاسم": "Ibrahim Eid Ibrahim Narwz _JASSON", "المنطقة": "Maadi", "المشرف": "Ahmed Mostafa", "أيام العمل": 2, "أيام الغياب/عدم العمل": 5, "متوسط ساعات العمل": 3.85, "عدد أيام الغياب المسجل": 2, "عدد أيام الإيقاف": 0},
-                {"كود المندوب": 1531752, "الاسم": "Abdlrhman Saad Sedek _ Jasson", "المنطقة": "Maadi", "المشرف": "Ahmed Mostafa", "أيام العمل": 2, "أيام الغياب/عدم العمل": 5, "متوسط ساعات العمل": 7.45, "عدد أيام الغياب المسجل": 0, "عدد أيام الإيقاف": 0},
-                {"كود المندوب": 931208, "الاسم": "Ahmed Ramdan Rakha Hassan _JASSON", "المنطقة": "Maadi", "المشرف": "Ahmed Mostafa", "أيام العمل": 2, "أيام الغياب/عدم العمل": 5, "متوسط ساعات العمل": 5.76, "عدد أيام الغياب المسجل": 0, "عدد أيام الإيقاف": 0},
-                {"كود المندوب": 797809, "الاسم": "Ibrahim Ahmed Osman_Jasson", "المنطقة": "Maadi", "المشرف": "Zanaty", "أيام العمل": 1, "أيام الغياب/عدم العمل": 6, "متوسط ساعات العمل": 5.10, "عدد أيام الغياب المسجل": 3, "عدد أيام الإيقاف": 0},
-                {"كود المندوب": 1626021, "الاسم": "Muhammad Saad Siddiq _JASSON", "المنطقة": "Maadi", "المشرف": "Ahmed Mostafa", "أيام العمل": 2, "أيام الغياب/عدم العمل": 5, "متوسط ساعات العمل": 5.96, "عدد أيام الغياب المسجل": 0, "عدد أيام الإيقاف": 0},
-                {"كود المندوب": 2218403, "الاسم": "Mohamed Abdallah Abdelhamid _JASSON", "المنطقة": "Maadi", "المشرف": "Ahmed Mostafa", "أيام العمل": 2, "أيام الغياب/عدم العمل": 5, "متوسط ساعات العمل": 8.13, "عدد أيام الغياب المسجل": 1, "عدد أيام الإيقاف": 0},
-                {"كود المندوب": 3887715, "الاسم": "Abdelrahman Ahmad Hamada Abdelmonem _JASSON_BC", "المنطقة": "Maadi", "المشرف": "Ahmed Mostafa", "أيام العمل": 2, "أيام الغياب/عدم العمل": 5, "متوسط ساعات العمل": 8.44, "عدد أيام الغياب المسجل": 1, "عدد أيام الإيقاف": 0},
-                {"كود المندوب": 2197560, "الاسم": "Ezzat Saleh Kamel Mohamed _JASSON", "المنطقة": "Maadi", "المشرف": "Ahmed Mostafa", "أيام العمل": 1, "أيام الغياب/عدم العمل": 6, "متوسط ساعات العمل": 12.06, "عدد أيام الغياب المسجل": 1, "عدد أيام الإيقاف": 0},
-                {"كود المندوب": 2480344, "الاسم": "Philopater Girgis Sobhi Agaybi _JASSON", "المنطقة": "Maadi", "المشرف": "Ahmed Mostafa", "أيام العمل": 2, "أيام الغياب/عدم العمل": 5, "متوسط ساعات العمل": 5.92, "عدد أيام الغياب المسجل": 0, "عدد أيام الإيقاف": 0},
-                {"كود المندوب": 4321605, "الاسم": "Atef Ahmed Elleissi Ismail _JASSON", "المنطقة": "Maadi", "المشرف": "Ahmed Mostafa", "أيام العمل": 2, "أيام الغياب/عدم العمل": 5, "متوسط ساعات العمل": 13.26, "عدد أيام الغياب المسجل": 2, "عدد أيام الإيقاف": 0},
-                {"كود المندوب": 1872464, "الاسم": "Youssef Lotfy Khalaf_Jasson", "المنطقة": "Mokattam", "المشرف": "Ahmed Mostafa", "أيام العمل": 1, "أيام الغياب/عدم العمل": 6, "متوسط ساعات العمل": 4.13, "عدد أيام الغياب المسجل": 0, "عدد أيام الإيقاف": 0},
-                {"كود المندوب": 2142551, "الاسم": "Abdelqadir Ahmad Mahmoud_Jasson", "المنطقة": "Mokattam", "المشرف": "Ahmed Mostafa", "أيام العمل": 2, "أيام الغياب/عدم العمل": 5, "متوسط ساعات العمل": 5.55, "عدد أيام الغياب المسجل": 0, "عدد أيام الإيقاف": 0},
-                {"كود المندوب": 4728166, "الاسم": "Hussein Mohamed Bakry Breik _JASSON", "المنطقة": "Mokattam", "المشرف": "Ahmed Mostafa", "أيام العمل": 1, "أيام الغياب/عدم العمل": 6, "متوسط ساعات العمل": 8.45, "عدد أيام الغياب المسجل": 0, "عدد أيام الإيقاف": 0}
-            ],
-            "أداء ضعيف (ساعات قليلة)": [
-                {"كود المندوب": 2205359, "الاسم": "Mansour Magdy Hussien _ JASSON", "المنطقة": "Helwan", "المشرف": "Kareemeesa", "أيام العمل": 7, "أيام الغياب/عدم العمل": 0, "متوسط ساعات العمل": 5.35, "عدد أيام الغياب المسجل": 0, "عدد أيام الإيقاف": 0},
-                {"كود المندوب": 4584364, "الاسم": "Muhammad Yasser Muhammad Abdulwahab _JASSON", "المنطقة": "Helwan", "المشرف": "Kareemeesa", "أيام العمل": 5, "أيام الغياب/عدم العمل": 2, "متوسط ساعات العمل": 4.44, "عدد أيام الغياب المسجل": 0, "عدد أيام الإيقاف": 0},
-                {"كود المندوب": 4640818, "الاسم": "Younis Hani Fawzi Ismail _JASSON", "المنطقة": "Helwan", "المشرف": "Kareemeesa", "أيام العمل": 6, "أيام الغياب/عدم العمل": 1, "متوسط ساعات العمل": 5.51, "عدد أيام الغياب المسجل": 0, "عدد أيام الإيقاف": 0},
-                {"كود المندوب": 4738698, "الاسم": "Mohamed Farag Abdulhamid Mahmoud _JASSON", "المنطقة": "Helwan", "المشرف": "Kareemeesa", "أيام العمل": 5, "أيام الغياب/عدم العمل": 2, "متوسط ساعات العمل": 5.60, "عدد أيام الغياب المسجل": 1, "عدد أيام الإيقاف": 0},
-                {"كود المندوب": 4806144, "الاسم": "Hossam Mohamed Ahmed Ahmed  _JASSON", "المنطقة": "Helwan", "المشرف": "Kareemeesa", "أيام العمل": 4, "أيام الغياب/عدم العمل": 3, "متوسط ساعات العمل": 4.53, "عدد أيام الغياب المسجل": 1, "عدد أيام الإيقاف": 0},
-                {"كود المندوب": 4852568, "الاسم": "Kareem Sayed Mahmoud Mohamed _JASSON", "المنطقة": "Helwan", "المشرف": "Kareemeesa", "أيام العمل": 3, "أيام الغياب/عدم العمل": 4, "متوسط ساعات العمل": 5.28, "عدد أيام الغياب المسجل": 0, "عدد أيام الإيقاف": 0},
-                {"كود المندوب": 1547299, "الاسم": "Mahmoud Mohammed Mahmoud _JASSON", "المنطقة": "Maadi", "المشرف": "Zanaty", "أيام العمل": 5, "أيام الغياب/عدم العمل": 2, "متوسط ساعات العمل": 4.62, "عدد أيام الغياب المسجل": 0, "عدد أيام الإيقاف": 0},
-                {"كود المندوب": 1118106, "الاسم": "Moustafa Abdelwahab Mahmoud Mohamed _JASSON", "المنطقة": "Maadi", "المشرف": "Ahmed Mostafa", "أيام العمل": 4, "أيام الغياب/عدم العمل": 3, "متوسط ساعات العمل": 5.73, "عدد أيام الغياب المسجل": 1, "عدد أيام الإيقاف": 0},
-                {"كود المندوب": 1384642, "الاسم": "Mostafa Mahmoud Hanfy_Jasson", "المنطقة": "Maadi", "المشرف": "Ahmed Mostafa", "أيام العمل": 5, "أيام الغياب/عدم العمل": 2, "متوسط ساعات العمل": 3.64, "عدد أيام الغياب المسجل": 1, "عدد أيام الإيقاف": 0},
-                {"كود المندوب": 1311386, "الاسم": "Youssef Ayman Abdelhamed Mahmoud _JASSON_BC", "المنطقة": "Maadi", "المشرف": "Ahmed Mostafa", "أيام العمل": 3, "أيام الغياب/عدم العمل": 4, "متوسط ساعات العمل": 3.28, "عدد أيام الغياب المسجل": 2, "عدد أيام الإيقاف": 0},
-                {"كود المندوب": 3665294, "الاسم": "Adam Mohammed Ibrahim Ahmed _JASSON_BC", "المنطقة": "Maadi", "المشرف": "Ahmed Mostafa", "أيام العمل": 4, "أيام الغياب/عدم العمل": 3, "متوسط ساعات العمل": 5.99, "عدد أيام الغياب المسجل": 1, "عدد أيام الإيقاف": 0},
-                {"كود المندوب": 4055732, "الاسم": "Omar Khalid Abdelfatah Abdelbaki _JASSON_BC", "المنطقة": "Maadi", "المشرف": "Ahmed Mostafa", "أيام العمل": 6, "أيام الغياب/عدم العمل": 1, "متوسط ساعات العمل": 5.07, "عدد أيام الغياب المسجل": 0, "عدد أيام الإيقاف": 0},
-                {"كود المندوب": 4202720, "الاسم": "Ashraf Mohamed Kamal Ghalib _JASSON_BC", "المنطقة": "Maadi", "المشرف": "Zanaty", "أيام العمل": 3, "أيام الغياب/عدم العمل": 4, "متوسط ساعات العمل": 3.47, "عدد أيام الغياب المسجل": 0, "عدد أيام الإيقاف": 0},
-                {"كود المندوب": 4197743, "الاسم": "Kyrillos Adel Eryan Faraj _JASSON", "المنطقة": "Maadi", "المشرف": "Ahmed Mostafa", "أيام العمل": 5, "أيام الغياب/عدم العمل": 2, "متوسط ساعات العمل": 5.80, "عدد أيام الغياب المسجل": 0, "عدد أيام الإيقاف": 0},
-                {"كود المندوب": 1172496, "الاسم": "Karim Walid Mohamed Fahmy _JASSON", "المنطقة": "Maadi", "المشرف": "Ahmed Mostafa", "أيام العمل": 4, "أيام الغياب/عدم العمل": 3, "متوسط ساعات العمل": 5.80, "عدد أيام الغياب المسجل": 2, "عدد أيام الإيقاف": 0},
-                {"كود المندوب": 4441571, "الاسم": "Tariq Rabie Hassan Abdelrahman _JASSON", "المنطقة": "Maadi", "المشرف": "Zanaty", "أيام العمل": 4, "أيام الغياب/عدم العمل": 3, "متوسط ساعات العمل": 5.17, "عدد أيام الغياب المسجل": 0, "عدد أيام الإيقاف": 0},
-                {"كود المندوب": 4831236, "الاسم": "Mohamed Hassan Hafni Mohamed _JASSON", "المنطقة": "Maadi", "المشرف": "Kareemeesa", "أيام العمل": 6, "أيام الغياب/عدم العمل": 1, "متوسط ساعات العمل": 5.25, "عدد أيام الغياب المسجل": 0, "عدد أيام الإيقاف": 0},
-                {"كود المندوب": 4831493, "الاسم": "Eyad Hany Mohamed Mohamed _JASSON_BC", "المنطقة": "Maadi", "المشرف": "Ahmed Mostafa", "أيام العمل": 4, "أيام الغياب/عدم العمل": 3, "متوسط ساعات العمل": 3.47, "عدد أيام الغياب المسجل": 1, "عدد أيام الإيقاف": 0},
-                {"كود المندوب": 1818221, "الاسم": "Muhammad Jamal Ahmed Abdulrahman _JASSON", "المنطقة": "Mokattam", "المشرف": "Zanaty", "أيام العمل": 5, "أيام الغياب/عدم العمل": 2, "متوسط ساعات العمل": 4.21, "عدد أيام الغياب المسجل": 0, "عدد أيام الإيقاف": 0},
-                {"كود المندوب": 4703397, "الاسم": "Sabry Rabie Sabry Mohamed _JASSON", "المنطقة": "Mokattam", "المشرف": "Ahmed Mostafa", "أيام العمل": 4, "أيام الغياب/عدم العمل": 3, "متوسط ساعات العمل": 5.43, "عدد أيام الغياب المسجل": 0, "عدد أيام الإيقاف": 0},
-                {"كود المندوب": 4811804, "الاسم": "Abdelmajid Eid Rasmi Abdelmajid _JASSON", "المنطقة": "Mokattam", "المشرف": "Zanaty", "أيام العمل": 6, "أيام الغياب/عدم العمل": 1, "متوسط ساعات العمل": 4.36, "عدد أيام الغياب المسجل": 0, "عدد أيام الإيقاف": 0}
-            ]
+        const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQuC0_Wat8ldoeyQIpyDLitB6HTwggTwBCEBlaMhxLqXjUbF8USdV1wYoq6sFrlR0m1i8pYH_WOcdbS/pub?gid=2039215920&single=true&output=csv';
+
+        let rawData = {
+            "مش شغال خالص (7 أيام)": [],
+            "موقوف": [],
+            "غياب متكرر": [],
+            "أيام عمل قليلة (1-2)": [],
+            "أداء ضعيف (ساعات قليلة)": []
         };
 
         let currentTab = Object.keys(rawData)[0];
+        let chartInstance = null;
 
-        // Set KPI Numbers
-        document.getElementById('kpi-1').innerText = rawData["مش شغال خالص (7 أيام)"].length;
-        document.getElementById('kpi-2').innerText = rawData["موقوف"].length;
-        document.getElementById('kpi-3').innerText = rawData["غياب متكرر"].length;
-        document.getElementById('kpi-4').innerText = rawData["أيام عمل قليلة (1-2)"].length;
-        document.getElementById('kpi-5').innerText = rawData["أداء ضعيف (ساعات قليلة)"].length;
-
-        // Chart
-        const ctx = document.getElementById('performanceChart').getContext('2d');
-        new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: Object.keys(rawData),
-                datasets: [{
-                    label: 'عدد المناديب',
-                    data: Object.values(rawData).map(arr => arr.length),
-                    backgroundColor: [
-                        'rgba(239, 68, 68, 0.8)',
-                        'rgba(251, 146, 60, 0.8)',
-                        'rgba(250, 204, 21, 0.8)',
-                        'rgba(56, 189, 248, 0.8)',
-                        'rgba(192, 132, 252, 0.8)'
-                    ],
-                    borderRadius: 6
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
-                scales: {
-                    x: { ticks: { color: '#94a3b8' }, grid: { display: false } },
-                    y: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } }
+        function fetchLiveSheetData() {
+            Papa.parse(CSV_URL, {
+                download: true,
+                header: true,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    processSheetData(results.data);
+                    document.getElementById('last-updated').innerHTML = `<i class="fa-regular fa-clock me-1"></i> تم تحديث البيانات تلقائياً: ${new Date().toLocaleTimeString('ar-EG')}`;
+                },
+                error: function(err) {
+                    console.error("خطأ أثناء جلب البيانات:", err);
+                    document.getElementById('last-updated').innerHTML = `<i class="fa-solid fa-circle-exclamation text-red-400 me-1"></i> تعذر تحديث البيانات تلقائياً`;
                 }
-            }
-        });
-
-        // Tabs
-        const tabsContainer = document.getElementById('tabs-container');
-        Object.keys(rawData).forEach((sheetName, index) => {
-            const btn = document.createElement('button');
-            btn.className = `px-4 py-2 text-sm font-semibold rounded-lg transition whitespace-nowrap ${index === 0 ? 'bg-amber-500 text-slate-900' : 'text-slate-400 hover:bg-slate-700 hover:text-slate-200'}`;
-            btn.innerText = `${sheetName} (${rawData[sheetName].length})`;
-            btn.onclick = () => switchTab(sheetName, btn);
-            tabsContainer.appendChild(btn);
-        });
-
-        function switchTab(sheetName, btnElement) {
-            currentTab = sheetName;
-            document.querySelectorAll('#tabs-container button').forEach(b => {
-                b.className = 'px-4 py-2 text-sm font-semibold rounded-lg transition whitespace-nowrap text-slate-400 hover:bg-slate-700 hover:text-slate-200';
             });
-            btnElement.className = 'px-4 py-2 text-sm font-semibold rounded-lg transition whitespace-nowrap bg-amber-500 text-slate-900';
+        }
+
+        function parseNum(val) {
+            let n = parseFloat(val);
+            return isNaN(n) ? 0 : n;
+        }
+
+        function processSheetData(rows) {
+            // Reset Arrays
+            Object.keys(rawData).forEach(key => rawData[key] = []);
+
+            rows.forEach(row => {
+                // Read CSV Columns flexible naming
+                const code = row['كود المندوب'] || row['كود'] || row['Code'] || '';
+                const name = row['الاسم'] || row['اسم المندوب'] || row['Name'] || '';
+                const zone = row['المنطقة'] || row['Zone'] || '';
+                const supervisor = row['المشرف'] || row['Supervisor'] || '';
+                const workDays = parseNum(row['أيام العمل'] || row['Work Days']);
+                const offDays = parseNum(row['أيام الغياب/عدم العمل'] || row['Off Days']);
+                const avgHours = row['متوسط ساعات العمل'] || row['Average Hours'] || '-';
+                const absRecorded = parseNum(row['عدد أيام الغياب المسجل'] || row['Recorded Absences']);
+                const suspendedDays = parseNum(row['عدد أيام الإيقاف'] || row['Suspended Days']);
+
+                const item = {
+                    "كود المندوب": code,
+                    "الاسم": name,
+                    "المنطقة": zone,
+                    "المشرف": supervisor,
+                    "أيام العمل": workDays,
+                    "أيام الغياب/عدم العمل": offDays,
+                    "متوسط ساعات العمل": avgHours,
+                    "عدد أيام الغياب المسجل": absRecorded,
+                    "عدد أيام الإيقاف": suspendedDays
+                };
+
+                if (!code && !name) return; // ignore empty rows
+
+                // Categorization logic
+                if (workDays === 0) {
+                    rawData["مش شغال خالص (7 أيام)"].push(item);
+                }
+                if (suspendedDays > 0) {
+                    rawData["موقوف"].push(item);
+                }
+                if (absRecorded > 0) {
+                    rawData["غياب متكرر"].push(item);
+                }
+                if (workDays === 1 || workDays === 2) {
+                    rawData["أيام عمل قليلة (1-2)"].push(item);
+                }
+                if (workDays > 2 && avgHours !== '-' && parseNum(avgHours) < 6) {
+                    rawData["أداء ضعيف (ساعات قليلة)"].push(item);
+                }
+            });
+
+            updateKPIs();
+            renderChart();
+            renderTabs();
             renderTable();
+        }
+
+        function updateKPIs() {
+            document.getElementById('kpi-1').innerText = rawData["مش شغال خالص (7 أيام)"].length;
+            document.getElementById('kpi-2').innerText = rawData["موقوف"].length;
+            document.getElementById('kpi-3').innerText = rawData["غياب متكرر"].length;
+            document.getElementById('kpi-4').innerText = rawData["أيام عمل قليلة (1-2)"].length;
+            document.getElementById('kpi-5').innerText = rawData["أداء ضعيف (ساعات قليلة)"].length;
+        }
+
+        function renderChart() {
+            const ctx = document.getElementById('performanceChart').getContext('2d');
+            if (chartInstance) chartInstance.destroy();
+
+            chartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(rawData),
+                    datasets: [{
+                        label: 'عدد المناديب',
+                        data: Object.values(rawData).map(arr => arr.length),
+                        backgroundColor: [
+                            'rgba(239, 68, 68, 0.8)',
+                            'rgba(251, 146, 60, 0.8)',
+                            'rgba(250, 204, 21, 0.8)',
+                            'rgba(56, 189, 248, 0.8)',
+                            'rgba(192, 132, 252, 0.8)'
+                        ],
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { ticks: { color: '#94a3b8' }, grid: { display: false } },
+                        y: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } }
+                    }
+                }
+            });
+        }
+
+        function renderTabs() {
+            const tabsContainer = document.getElementById('tabs-container');
+            tabsContainer.innerHTML = '';
+            
+            Object.keys(rawData).forEach((sheetName) => {
+                const btn = document.createElement('button');
+                const isActive = sheetName === currentTab;
+                btn.className = `px-4 py-2 text-sm font-semibold rounded-lg transition whitespace-nowrap ${isActive ? 'bg-amber-500 text-slate-900' : 'text-slate-400 hover:bg-slate-700 hover:text-slate-200'}`;
+                btn.innerText = `${sheetName} (${rawData[sheetName].length})`;
+                btn.onclick = () => {
+                    currentTab = sheetName;
+                    renderTabs();
+                    renderTable();
+                };
+                tabsContainer.appendChild(btn);
+            });
         }
 
         function renderTable() {
@@ -228,7 +255,8 @@
             const searchVal = document.getElementById('search-input').value.toLowerCase();
             tbody.innerHTML = '';
 
-            const filteredData = rawData[currentTab].filter(item => {
+            const list = rawData[currentTab] || [];
+            const filteredData = list.filter(item => {
                 return String(item["كود المندوب"]).includes(searchVal) ||
                        String(item["الاسم"]).toLowerCase().includes(searchVal) ||
                        String(item["المنطقة"]).toLowerCase().includes(searchVal) ||
@@ -238,7 +266,7 @@
             document.getElementById('record-count').innerText = filteredData.length;
 
             if (filteredData.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="9" class="text-center py-6 text-slate-500">لا توجد بيانات مطابقة.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="9" class="text-center py-6 text-slate-500">لا توجد بيانات مطابقة لهذه الفئة.</td></tr>`;
                 return;
             }
 
@@ -261,7 +289,9 @@
         }
 
         document.getElementById('search-input').addEventListener('input', renderTable);
-        renderTable();
+        
+        // Initial Fetch
+        fetchLiveSheetData();
     </script>
 </body>
 </html>
