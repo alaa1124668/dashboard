@@ -111,15 +111,13 @@
                 id: 'sheet_performance',
                 name: 'تقرير الأداء الرئيسي',
                 icon: 'fa-chart-line',
-                docId: '1QuC0_Wat8ldoeyQIpyDLitB6HTwggTwBCEBlaMhxLqXjUbF8USdV1wYoq6sFrlR0m1i8pYH_WOcdbS',
-                gid: '2039215920'
+                apiUrl: 'https://script.google.com/macros/s/AKfycbxlx4qkVkjvLe-axw8OboOZaagKbDr0j5uMjTO7wsxXjdWZL7AVU4aA7YRVPwfd_pxi/exec'
             },
             {
                 id: 'sheet_daily_target',
                 name: 'التارجت اليومي',
                 icon: 'fa-bullseye',
-                docId: '1QcnDyqkCd9Vnuz25FpZ2ZMoF8qJbJ5VruRZyVMr1JdJtjY0dWokxQo6u-h7KRdJB-u9GFUYaEJjD_',
-                gid: '0'
+                apiUrl: 'https://script.google.com/macros/s/AKfycbz_RgmGZ18v8V66-ySFUCJcp0gcH0CT6U-9J-AwQDF9ylDpcWlJkklkGbzlzfw9q2k6/exec'
             }
         ];
 
@@ -164,54 +162,41 @@
             loadSheetData();
         }
 
-        function loadSheetData() {
+        async function loadSheetData() {
             hideError();
             const sheet = SHEETS_CONFIG.find(s => s.id === activeSheetId);
             if (!sheet) return;
 
             document.getElementById('last-updated').innerHTML = `<i class="fa-solid fa-spinner fa-spin me-1"></i> جاري تحميل ${sheet.name}...`;
 
-            // تنظيف أي سكربت محمل سابقاً
-            const oldScript = document.getElementById('gviz-jsonp-script');
-            if (oldScript) oldScript.remove();
-
-            // إعداد دالة الاستجابة لـ Google GViz
-            window.handleGvizResponse = function(response) {
-                if (!response || !response.table) {
-                    showError('تعذر الوصول للبيانات. يرجى التأكد من تغيير إذن المشاركة في Google Sheets لـ "Anyone with link".');
-                    return;
+            try {
+                const response = await fetch(sheet.apiUrl, { redirect: 'follow' });
+                if (!response.ok) throw new Error('فشل جلب البيانات من السيرفر');
+                
+                const rows = await response.json();
+                
+                if (Array.isArray(rows) && rows.length > 0) {
+                    parseArrayData(rows);
+                    document.getElementById('last-updated').innerHTML = `<i class="fa-regular fa-clock me-1"></i> ${sheet.name} (تم التحديث: ${new Date().toLocaleTimeString('ar-EG')})`;
+                } else {
+                    showError('البيانات المستلمة فارغة.');
                 }
-                parseGvizTable(response.table);
-                document.getElementById('last-updated').innerHTML = `<i class="fa-regular fa-clock me-1"></i> ${sheet.name} (تم التحديث: ${new Date().toLocaleTimeString('ar-EG')})`;
-            };
-
-            // إعداد كيان Google المعياري المطلوب من GViz
-            window.google = window.google || {};
-            window.google.visualization = window.google.visualization || {};
-            window.google.visualization.Query = window.google.visualization.Query || {};
-            window.google.visualization.Query.setResponse = window.handleGvizResponse;
-
-            // إنشاء عنصر Script جافاسكربت لتخطي حظر CORS تماماً
-            const script = document.createElement('script');
-            script.id = 'gviz-jsonp-script';
-            script.src = `https://docs.google.com/spreadsheets/d/${sheet.docId}/gviz/tq?gid=${sheet.gid}&tqx=out:json`;
-            script.onerror = function() {
-                showError('تأكد من فتح صلاحية مشاركة ملف Google Sheets لـ "Anyone with the link" بصفة Viewer.');
+            } catch (err) {
+                console.error(err);
+                showError('تعذر جلب البيانات من Apps Script. أعد التأكد من إعداد النشر (Who has access: Anyone).');
                 document.getElementById('last-updated').innerHTML = `<i class="fa-solid fa-circle-exclamation text-red-400 me-1"></i> خطأ التحميل`;
-            };
-            document.head.appendChild(script);
+            }
         }
 
-        function parseGvizTable(table) {
-            if (!table || !table.rows) return;
+        function parseArrayData(rows) {
+            if (rows.length < 2) return;
 
-            const cols = table.cols.map(c => (c ? c.label || '' : ''));
-            const rawRows = table.rows;
+            const headers = rows[0].map(h => String(h || '').trim());
 
-            let riderIdIdx = cols.findIndex(c => c.toLowerCase().includes('rider id') || c.includes('كود'));
-            let riderNameIdx = cols.findIndex(c => c.toLowerCase().includes('rider name') || c.includes('اسم'));
-            let zoneIdx = cols.findIndex(c => c.toLowerCase().includes('zone') || c.includes('منطقة'));
-            let supervisorIdx = cols.findIndex(c => c.includes('المشرف') || c.toLowerCase().includes('supervisor'));
+            let riderIdIdx = headers.findIndex(c => c.toLowerCase().includes('rider id') || c.includes('كود'));
+            let riderNameIdx = headers.findIndex(c => c.toLowerCase().includes('rider name') || c.includes('اسم'));
+            let zoneIdx = headers.findIndex(c => c.toLowerCase().includes('zone') || c.includes('منطقة'));
+            let supervisorIdx = headers.findIndex(c => c.includes('المشرف') || c.toLowerCase().includes('supervisor'));
 
             if (riderIdIdx === -1) riderIdIdx = 0;
             if (riderNameIdx === -1) riderNameIdx = 1;
@@ -220,15 +205,16 @@
 
             let parsedData = [];
 
-            rawRows.forEach(r => {
-                if (!r.c) return;
-                
-                const riderId = r.c[riderIdIdx] ? (r.c[riderIdIdx].v !== null ? r.c[riderIdIdx].v : '') : '';
-                const riderName = r.c[riderNameIdx] ? (r.c[riderNameIdx].v !== null ? r.c[riderNameIdx].v : '') : '';
-                const zone = r.c[zoneIdx] ? (r.c[zoneIdx].v !== null ? r.c[zoneIdx].v : '') : '';
-                const supervisor = r.c[supervisorIdx] ? (r.c[supervisorIdx].v !== null ? r.c[supervisorIdx].v : '') : '';
+            for (let r = 1; r < rows.length; r++) {
+                const row = rows[r];
+                if (!Array.isArray(row)) continue;
 
-                if (!riderId && !riderName) return;
+                const riderId = row[riderIdIdx] !== undefined ? String(row[riderIdIdx]).trim() : '';
+                const riderName = row[riderNameIdx] !== undefined ? String(row[riderNameIdx]).trim() : '';
+                const zone = row[zoneIdx] !== undefined ? String(row[zoneIdx]).trim() : '';
+                const supervisor = row[supervisorIdx] !== undefined ? String(row[supervisorIdx]).trim() : '';
+
+                if (!riderId && !riderName) continue;
 
                 let workDays = 0;
                 let notWorkingDays = 0;
@@ -236,26 +222,31 @@
                 let susDays = 0;
                 let totalHoursSec = 0;
 
-                for (let i = 4; i < r.c.length; i++) {
-                    const cell = r.c[i];
-                    if (!cell || cell.v === null || cell.v === undefined) continue;
+                for (let i = 4; i < row.length; i++) {
+                    const cellVal = row[i];
+                    if (cellVal === null || cellVal === undefined) continue;
 
-                    const val = String(cell.v).trim();
-                    const formatted = cell.f || val;
+                    const val = String(cellVal).trim();
+                    if (!val) continue;
 
-                    if (val === 'غياب' || formatted.includes('غياب')) {
+                    if (val.includes('غياب')) {
                         absDays++;
                         notWorkingDays++;
-                    } else if (val === 'موقوف' || formatted.includes('موقوف')) {
+                    } else if (val.includes('موقوف')) {
                         susDays++;
                         notWorkingDays++;
-                    } else if (val === 'مش مختار' || formatted.includes('مش مختار')) {
+                    } else if (val.includes('مش مختار')) {
                         notWorkingDays++;
-                    } else if (typeof cell.v === 'number' || val.includes(':')) {
+                    } else if (typeof cellVal === 'number' || val.includes(':') || !isNaN(val)) {
                         workDays++;
-                        if (typeof cell.v === 'number') {
-                            totalHoursSec += cell.v * 86400;
-                        } else {
+                        if (typeof cellVal === 'number') {
+                            // إذا كانت الوقت بنسبة مئوية من اليوم (تنسيق جوجل شيت)
+                            if (cellVal < 1) {
+                                totalHoursSec += cellVal * 86400;
+                            } else {
+                                totalHoursSec += cellVal * 3600;
+                            }
+                        } else if (val.includes(':')) {
                             const parts = val.split(':').map(Number);
                             if (parts.length >= 2) {
                                 totalHoursSec += (parts[0] * 3600) + (parts[1] * 60) + (parts[2] || 0);
@@ -280,7 +271,7 @@
                     "الغياب": absDays,
                     "الإيقاف": susDays
                 });
-            });
+            }
 
             processSheetData(parsedData);
         }
@@ -371,7 +362,7 @@
 
             const list = rawData[currentTabCategory] || [];
             const filteredData = list.filter(item => {
-                return String(item["كود المندوب"]).includes(searchVal) ||
+                return String(item["كود المندوب"]).toLowerCase().includes(searchVal) ||
                        String(item["الاسم"]).toLowerCase().includes(searchVal) ||
                        String(item["المنطقة"]).toLowerCase().includes(searchVal) ||
                        String(item["المشرف"]).toLowerCase().includes(searchVal);
@@ -380,7 +371,7 @@
             document.getElementById('record-count').innerText = filteredData.length;
 
             if (filteredData.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="9" class="text-center py-6 text-slate-500">لا توجد بيانات مطابقة لهذه الفئة.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="9" class="text-center py-6 text-slate-500">لا توجد بيانات مطابقة لهذا الفلتر أو التبويب.</td></tr>`;
                 return;
             }
 
