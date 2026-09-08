@@ -6,7 +6,6 @@
     <title>داشبورد متابعة الأداء والتارجت اليومي</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap');
@@ -172,36 +171,47 @@
 
             document.getElementById('last-updated').innerHTML = `<i class="fa-solid fa-spinner fa-spin me-1"></i> جاري تحميل ${sheet.name}...`;
 
-            const csvUrl = `https://docs.google.com/spreadsheets/d/${sheet.docId}/export?format=csv&gid=${sheet.gid}`;
+            // تنظيف أي سكربت محمل سابقاً
+            const oldScript = document.getElementById('gviz-jsonp-script');
+            if (oldScript) oldScript.remove();
 
-            Papa.parse(csvUrl, {
-                download: true,
-                header: false,
-                skipEmptyLines: true,
-                complete: function(results) {
-                    if (results.data && results.data.length > 0) {
-                        parseCsvData(results.data);
-                        document.getElementById('last-updated').innerHTML = `<i class="fa-regular fa-clock me-1"></i> ${sheet.name} (تم التحديث: ${new Date().toLocaleTimeString('ar-EG')})`;
-                    } else {
-                        showError('لم يتم العثور على بيانات داخل الشيت.');
-                    }
-                },
-                error: function(err) {
-                    showError('خطأ التحميل: يرجى التأكد من اختيار (النشر على الويب Publish to web) داخل الشيت.');
-                    document.getElementById('last-updated').innerHTML = `<i class="fa-solid fa-circle-exclamation text-red-400 me-1"></i> خطأ التحميل`;
+            // إعداد دالة الاستجابة لـ Google GViz
+            window.handleGvizResponse = function(response) {
+                if (!response || !response.table) {
+                    showError('تعذر الوصول للبيانات. يرجى التأكد من تغيير إذن المشاركة في Google Sheets لـ "Anyone with link".');
+                    return;
                 }
-            });
+                parseGvizTable(response.table);
+                document.getElementById('last-updated').innerHTML = `<i class="fa-regular fa-clock me-1"></i> ${sheet.name} (تم التحديث: ${new Date().toLocaleTimeString('ar-EG')})`;
+            };
+
+            // إعداد كيان Google المعياري المطلوب من GViz
+            window.google = window.google || {};
+            window.google.visualization = window.google.visualization || {};
+            window.google.visualization.Query = window.google.visualization.Query || {};
+            window.google.visualization.Query.setResponse = window.handleGvizResponse;
+
+            // إنشاء عنصر Script جافاسكربت لتخطي حظر CORS تماماً
+            const script = document.createElement('script');
+            script.id = 'gviz-jsonp-script';
+            script.src = `https://docs.google.com/spreadsheets/d/${sheet.docId}/gviz/tq?gid=${sheet.gid}&tqx=out:json`;
+            script.onerror = function() {
+                showError('تأكد من فتح صلاحية مشاركة ملف Google Sheets لـ "Anyone with the link" بصفة Viewer.');
+                document.getElementById('last-updated').innerHTML = `<i class="fa-solid fa-circle-exclamation text-red-400 me-1"></i> خطأ التحميل`;
+            };
+            document.head.appendChild(script);
         }
 
-        function parseCsvData(rows) {
-            if (rows.length < 2) return;
+        function parseGvizTable(table) {
+            if (!table || !table.rows) return;
 
-            const headers = rows[0].map(h => String(h).trim());
+            const cols = table.cols.map(c => (c ? c.label || '' : ''));
+            const rawRows = table.rows;
 
-            let riderIdIdx = headers.findIndex(c => c.toLowerCase().includes('rider id') || c.includes('كود'));
-            let riderNameIdx = headers.findIndex(c => c.toLowerCase().includes('rider name') || c.includes('اسم'));
-            let zoneIdx = headers.findIndex(c => c.toLowerCase().includes('zone') || c.includes('منطقة'));
-            let supervisorIdx = headers.findIndex(c => c.includes('المشرف') || c.toLowerCase().includes('supervisor'));
+            let riderIdIdx = cols.findIndex(c => c.toLowerCase().includes('rider id') || c.includes('كود'));
+            let riderNameIdx = cols.findIndex(c => c.toLowerCase().includes('rider name') || c.includes('اسم'));
+            let zoneIdx = cols.findIndex(c => c.toLowerCase().includes('zone') || c.includes('منطقة'));
+            let supervisorIdx = cols.findIndex(c => c.includes('المشرف') || c.toLowerCase().includes('supervisor'));
 
             if (riderIdIdx === -1) riderIdIdx = 0;
             if (riderNameIdx === -1) riderNameIdx = 1;
@@ -210,14 +220,15 @@
 
             let parsedData = [];
 
-            for (let r = 1; r < rows.length; r++) {
-                const row = rows[r];
-                const riderId = row[riderIdIdx] || '';
-                const riderName = row[riderNameIdx] || '';
-                const zone = row[zoneIdx] || '';
-                const supervisor = row[supervisorIdx] || '';
+            rawRows.forEach(r => {
+                if (!r.c) return;
+                
+                const riderId = r.c[riderIdIdx] ? (r.c[riderIdIdx].v !== null ? r.c[riderIdIdx].v : '') : '';
+                const riderName = r.c[riderNameIdx] ? (r.c[riderNameIdx].v !== null ? r.c[riderNameIdx].v : '') : '';
+                const zone = r.c[zoneIdx] ? (r.c[zoneIdx].v !== null ? r.c[zoneIdx].v : '') : '';
+                const supervisor = r.c[supervisorIdx] ? (r.c[supervisorIdx].v !== null ? r.c[supervisorIdx].v : '') : '';
 
-                if (!riderId && !riderName) continue;
+                if (!riderId && !riderName) return;
 
                 let workDays = 0;
                 let notWorkingDays = 0;
@@ -225,27 +236,30 @@
                 let susDays = 0;
                 let totalHoursSec = 0;
 
-                for (let i = 4; i < row.length; i++) {
-                    const val = String(row[i] || '').trim();
-                    if (!val) continue;
+                for (let i = 4; i < r.c.length; i++) {
+                    const cell = r.c[i];
+                    if (!cell || cell.v === null || cell.v === undefined) continue;
 
-                    if (val.includes('غياب')) {
+                    const val = String(cell.v).trim();
+                    const formatted = cell.f || val;
+
+                    if (val === 'غياب' || formatted.includes('غياب')) {
                         absDays++;
                         notWorkingDays++;
-                    } else if (val.includes('موقوف')) {
+                    } else if (val === 'موقوف' || formatted.includes('موقوف')) {
                         susDays++;
                         notWorkingDays++;
-                    } else if (val.includes('مش مختار')) {
+                    } else if (val === 'مش مختار' || formatted.includes('مش مختار')) {
                         notWorkingDays++;
-                    } else if (val.includes(':') || !isNaN(val)) {
+                    } else if (typeof cell.v === 'number' || val.includes(':')) {
                         workDays++;
-                        if (val.includes(':')) {
+                        if (typeof cell.v === 'number') {
+                            totalHoursSec += cell.v * 86400;
+                        } else {
                             const parts = val.split(':').map(Number);
                             if (parts.length >= 2) {
                                 totalHoursSec += (parts[0] * 3600) + (parts[1] * 60) + (parts[2] || 0);
                             }
-                        } else {
-                            totalHoursSec += parseFloat(val) * 3600;
                         }
                     }
                 }
@@ -266,7 +280,7 @@
                     "الغياب": absDays,
                     "الإيقاف": susDays
                 });
-            }
+            });
 
             processSheetData(parsedData);
         }
