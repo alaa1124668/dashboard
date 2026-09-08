@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>داشبورد تقرير الأداء والتارجت اليومي</title>
+    <title>داشبورد متابعة الأداء والتارجت اليومي</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/Chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -31,9 +31,7 @@
     <div class="container mx-auto p-4 md:p-6 space-y-6">
 
         <!-- Sheet Switcher Tabs -->
-        <div class="bg-slate-800 p-2 rounded-xl border border-slate-700 flex flex-wrap gap-2" id="sheets-nav-container">
-            <!-- أزرار الشيتات ستظهر هنا -->
-        </div>
+        <div class="bg-slate-800 p-2 rounded-xl border border-slate-700 flex flex-wrap gap-2" id="sheets-nav-container"></div>
 
         <!-- KPI Cards -->
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
@@ -109,9 +107,6 @@
     </div>
 
     <script>
-        // ==========================================
-        // إعدادات الشيتات المصدرية
-        // ==========================================
         const SHEETS_CONFIG = [
             {
                 id: 'sheet_performance',
@@ -179,9 +174,20 @@
                 },
                 error: function(err) {
                     console.error("خطأ أثناء جلب البيانات:", err);
-                    document.getElementById('last-updated').innerHTML = `<i class="fa-solid fa-circle-exclamation text-red-400 me-1"></i> فشل جلب بيانات ${sheet.name}`;
+                    document.getElementById('last-updated').innerHTML = `<i class="fa-solid fa-circle-exclamation text-red-400 me-1"></i> فشل جلب البيانات`;
                 }
             });
+        }
+
+        function getValue(row, keys) {
+            for (let k of keys) {
+                for (let rKey in row) {
+                    if (rKey.trim().toLowerCase() === k.toLowerCase()) {
+                        return row[rKey];
+                    }
+                }
+            }
+            return '';
         }
 
         function parseNum(val) {
@@ -193,15 +199,15 @@
             Object.keys(rawData).forEach(key => rawData[key] = []);
 
             rows.forEach(row => {
-                const code = row['كود المندوب'] || row['كود'] || row['Code'] || '';
-                const name = row['الاسم'] || row['اسم المندوب'] || row['Name'] || '';
-                const zone = row['المنطقة'] || row['Zone'] || '';
-                const supervisor = row['المشرف'] || row['Supervisor'] || '';
-                const workDays = parseNum(row['أيام العمل'] || row['Work Days']);
-                const offDays = parseNum(row['أيام الغياب/عدم العمل'] || row['Off Days']);
-                const avgHours = row['متوسط ساعات العمل'] || row['Average Hours'] || '-';
-                const absRecorded = parseNum(row['عدد أيام الغياب المسجل'] || row['Recorded Absences']);
-                const suspendedDays = parseNum(row['عدد أيام الإيقاف'] || row['Suspended Days']);
+                const code = getValue(row, ['كود المندوب', 'كود', 'code', 'الكود']);
+                const name = getValue(row, ['الاسم', 'اسم المندوب', 'name', 'اسم']);
+                const zone = getValue(row, ['المنطقة', 'zone', 'الفرع']);
+                const supervisor = getValue(row, ['المشرف', 'supervisor']);
+                const workDays = parseNum(getValue(row, ['أيام العمل', 'work days', 'ايام العمل']));
+                const offDays = parseNum(getValue(row, ['أيام الغياب/عدم العمل', 'off days', 'ايام الغياب']));
+                const avgHours = getValue(row, ['متوسط ساعات العمل', 'average hours']) || '-';
+                const absRecorded = parseNum(getValue(row, ['عدد أيام الغياب المسجل', 'recorded absences']));
+                const suspendedDays = parseNum(getValue(row, ['عدد أيام الإيقاف', 'suspended days']));
 
                 const item = {
                     "كود المندوب": code,
