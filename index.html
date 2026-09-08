@@ -1,121 +1,135 @@
-function parsePerformanceSheetData(rows) {
-    if (!rows || rows.length < 2) return;
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>لوحة التحكم</title>
+</head>
+<body>
 
-    const headers = rows[0].map(h => String(h || '').trim());
+    <!-- عناصر الواجهة الخاصة بك هنا -->
 
-    // تحديد أماكن الأعمدة الرئيسية
-    let riderIdIdx = headers.findIndex(c => c.toLowerCase().includes('rider id') || c.includes('كود'));
-    let riderNameIdx = headers.findIndex(c => c.toLowerCase().includes('rider name') || c.includes('اسم المندوب') || c.includes('الاسم'));
-    let zoneIdx = headers.findIndex(c => c.toLowerCase().includes('zone') || c.includes('منطقة'));
-    let supervisorIdx = headers.findIndex(c => c.includes('المشرف') || c.toLowerCase().includes('supervisor'));
-    let totalHoursIdx = headers.findIndex(c => c.includes('إجمالي الساعات') || c.includes('اجمالي الساعات') || c.toLowerCase().includes('total hours'));
+    <script>
+    function parsePerformanceSheetData(rows) {
+        if (!rows || rows.length < 2) return;
 
-    if (riderIdIdx === -1) riderIdIdx = 0;
-    if (riderNameIdx === -1) riderNameIdx = 1;
-    if (zoneIdx === -1) zoneIdx = 2;
-    if (supervisorIdx === -1) supervisorIdx = 3;
+        const headers = rows[0].map(h => String(h || '').trim());
 
-    // دالة مساعدة لتحويل أي قيمة (سواء كانت تاريخ ISO أو وقت أو رقم) إلى ثواني
-    function convertToSeconds(cellVal) {
-        if (cellVal === null || cellVal === undefined) return 0;
-        const valStr = String(cellVal).trim();
-        if (!valStr || valStr === 'NaN' || valStr === '-') return 0;
+        // تحديد أماكن الأعمدة الرئيسية
+        let riderIdIdx = headers.findIndex(c => c.toLowerCase().includes('rider id') || c.includes('كود'));
+        let riderNameIdx = headers.findIndex(c => c.toLowerCase().includes('rider name') || c.includes('اسم المندوب') || c.includes('الاسم'));
+        let zoneIdx = headers.findIndex(c => c.toLowerCase().includes('zone') || c.includes('منطقة'));
+        let supervisorIdx = headers.findIndex(c => c.includes('المشرف') || c.toLowerCase().includes('supervisor'));
+        let totalHoursIdx = headers.findIndex(c => c.includes('إجمالي الساعات') || c.includes('اجمالي الساعات') || c.toLowerCase().includes('total hours'));
 
-        // إذا كانت القيمة تاريخ ISO مثل 1900-01-06T08:51:43.000Z
-        if (valStr.includes('T') && valStr.includes('Z')) {
-            const timePart = valStr.split('T')[1]?.split('.')[0];
-            if (timePart) {
-                const p = timePart.split(':').map(Number);
-                return ((p[0] || 0) * 3600) + ((p[1] || 0) * 60) + (p[2] || 0);
+        if (riderIdIdx === -1) riderIdIdx = 0;
+        if (riderNameIdx === -1) riderNameIdx = 1;
+        if (zoneIdx === -1) zoneIdx = 2;
+        if (supervisorIdx === -1) supervisorIdx = 3;
+
+        // دالة تحويل الوقت والأرقام بجميع صيغها إلى ثواني
+        function convertToSeconds(cellVal) {
+            if (cellVal === null || cellVal === undefined) return 0;
+            const valStr = String(cellVal).trim();
+            if (!valStr || valStr === 'NaN' || valStr === '-') return 0;
+
+            // إذا كانت القيمة تاريخ ISO مثل 1900-01-06T08:51:43.000Z
+            if (valStr.includes('T') && valStr.includes('Z')) {
+                const timePart = valStr.split('T')[1]?.split('.')[0];
+                if (timePart) {
+                    const p = timePart.split(':').map(Number);
+                    return ((p[0] || 0) * 3600) + ((p[1] || 0) * 60) + (p[2] || 0);
+                }
             }
+
+            // إذا كانت صيغة HH:MM أو HH:MM:SS
+            if (valStr.includes(':')) {
+                const parts = valStr.split(':').map(p => parseFloat(p) || 0);
+                if (parts.length >= 2) {
+                    return (parts[0] * 3600) + (parts[1] * 60) + (parts[2] || 0);
+                }
+            }
+
+            // إذا كانت رقم عشري
+            const num = parseFloat(valStr);
+            if (!isNaN(num) && num > 0) {
+                return num < 1 ? num * 86400 : num * 3600;
+            }
+
+            return 0;
         }
 
-        // إذا كانت صيغة HH:MM أو HH:MM:SS
-        if (valStr.includes(':')) {
-            const parts = valStr.split(':').map(p => parseFloat(p) || 0);
-            if (parts.length >= 2) {
-                return (parts[0] * 3600) + (parts[1] * 60) + (parts[2] || 0);
+        let parsedData = [];
+
+        for (let r = 1; r < rows.length; r++) {
+            const row = rows[r];
+            if (!Array.isArray(row)) continue;
+
+            const riderId = row[riderIdIdx] !== undefined ? String(row[riderIdIdx]).trim() : '';
+            const riderName = row[riderNameIdx] !== undefined ? String(row[riderNameIdx]).trim() : '';
+            const zone = row[zoneIdx] !== undefined ? String(row[zoneIdx]).trim() : '';
+            const supervisor = row[supervisorIdx] !== undefined ? String(row[supervisorIdx]).trim() : '';
+
+            // تجنب الصفوف الفارغة أو صف الهيدر المكرر
+            if ((!riderId && !riderName) || riderId.toLowerCase() === 'rider id' || riderName.toLowerCase() === 'rider name') continue;
+
+            let workDays = 0, notWorkingDays = 0, absDays = 0, susDays = 0, totalHoursSec = 0;
+
+            // القراءة المباشرة من عمود إجمالي الساعات إن وجد
+            if (totalHoursIdx !== -1 && row[totalHoursIdx] !== undefined) {
+                totalHoursSec = convertToSeconds(row[totalHoursIdx]);
             }
-        }
 
-        // إذا كانت رقم عشري (نسبة مئوية من اليوم في إكسيل أو ساعات مباشرة)
-        const num = parseFloat(valStr);
-        if (!isNaN(num) && num > 0) {
-            return num < 1 ? num * 86400 : num * 3600;
-        }
+            // تجميع بيانات الأيام
+            for (let i = 4; i < row.length; i++) {
+                if (i === totalHoursIdx) continue;
+                const cellVal = row[i];
+                if (cellVal === null || cellVal === undefined) continue;
+                const val = String(cellVal).trim();
+                if (!val || val === 'NaN') continue;
 
-        return 0;
-    }
-
-    let parsedData = [];
-
-    for (let r = 1; r < rows.length; r++) {
-        const row = rows[r];
-        if (!Array.isArray(row)) continue;
-
-        const riderId = row[riderIdIdx] !== undefined ? String(row[riderIdIdx]).trim() : '';
-        const riderName = row[riderNameIdx] !== undefined ? String(row[riderNameIdx]).trim() : '';
-        const zone = row[zoneIdx] !== undefined ? String(row[zoneIdx]).trim() : '';
-        const supervisor = row[supervisorIdx] !== undefined ? String(row[supervisorIdx]).trim() : '';
-
-        // تتخطى الصفوف الفارغة وصف الهيدر المكرر
-        if ((!riderId && !riderName) || riderId.toLowerCase() === 'rider id' || riderName.toLowerCase() === 'rider name') continue;
-
-        let workDays = 0, notWorkingDays = 0, absDays = 0, susDays = 0, totalHoursSec = 0;
-
-        // 1. إذا كان عمود "إجمالي الساعات" موجوداً بالهيدر نقرأ منه مباشرة
-        if (totalHoursIdx !== -1 && row[totalHoursIdx] !== undefined) {
-            totalHoursSec = convertToSeconds(row[totalHoursIdx]);
-        }
-
-        // 2. تجميع الأيام والساعات التفصيلية من باقي الأعمدة
-        for (let i = 4; i < row.length; i++) {
-            if (i === totalHoursIdx) continue; // عدم تكرار الحساب
-            const cellVal = row[i];
-            if (cellVal === null || cellVal === undefined) continue;
-            const val = String(cellVal).trim();
-            if (!val || val === 'NaN') continue;
-
-            if (val.includes('غياب')) { 
-                absDays++; 
-                notWorkingDays++; 
-            }
-            else if (val.includes('موقوف')) { 
-                susDays++; 
-                notWorkingDays++; 
-            }
-            else if (val.includes('مش مختار')) { 
-                notWorkingDays++; 
-            }
-            else {
-                const sec = convertToSeconds(cellVal);
-                if (sec > 0) {
-                    workDays++;
-                    // إذا لم نجد عمود إجمالي الساعات بالهيدر، نجمع الساعات اليومية
-                    if (totalHoursIdx === -1) {
-                        totalHoursSec += sec;
+                if (val.includes('غياب')) { 
+                    absDays++; 
+                    notWorkingDays++; 
+                }
+                else if (val.includes('موقوف')) { 
+                    susDays++; 
+                    notWorkingDays++; 
+                }
+                else if (val.includes('مش مختار')) { 
+                    notWorkingDays++; 
+                }
+                else {
+                    const sec = convertToSeconds(cellVal);
+                    if (sec > 0) {
+                        workDays++;
+                        if (totalHoursIdx === -1) {
+                            totalHoursSec += sec;
+                        }
                     }
                 }
             }
+
+            // تحويل الثواني إلى ساعات ودقائق بضمان صيغة سليمة
+            const hours = Math.floor(totalHoursSec / 3600);
+            const mins = Math.floor((totalHoursSec % 3600) / 60);
+
+            parsedData.push({
+                "كود المندوب": riderId,
+                "الاسم": riderName,
+                "المنطقة": zone,
+                "المشرف": supervisor,
+                "أيام العمل": workDays,
+                "أيام عدم العمل": notWorkingDays,
+                "إجمالي الساعات": `${hours}:${mins < 10 ? '0' : ''}${mins}`,
+                "ساعات بالثواني": totalHoursSec,
+                "الغياب": absDays,
+                "الإيقاف": susDays
+            });
         }
 
-        // تحويل الثواني إلى صيغة ساعات:دقائق مضمونة
-        const hours = Math.floor(totalHoursSec / 3600);
-        const mins = Math.floor((totalHoursSec % 3600) / 60);
-
-        parsedData.push({
-            "كود المندوب": riderId,
-            "الاسم": riderName,
-            "المنطقة": zone,
-            "المشرف": supervisor,
-            "أيام العمل": workDays,
-            "أيام عدم العمل": notWorkingDays,
-            "إجمالي الساعات": `${hours}:${mins < 10 ? '0' : ''}${mins}`,
-            "ساعات بالثواني": totalHoursSec,
-            "الغياب": absDays,
-            "الإيقاف": susDays
-        });
+        processPerformanceSheetData(parsedData);
     }
-
-    processPerformanceSheetData(parsedData);
-}
+    </script>
+</body>
+</html>
