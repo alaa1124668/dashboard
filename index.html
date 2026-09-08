@@ -166,19 +166,23 @@
             if (zoneIdx === -1) zoneIdx = 2;
             if (supervisorIdx === -1) supervisorIdx = 3;
 
+            // دالة محسنة لتحويل أوقات Google Sheets وساعات الإكسيل بدقة إلى ثواني
             function convertToSeconds(cellVal) {
                 if (cellVal === null || cellVal === undefined) return 0;
-                const valStr = String(cellVal).trim();
-                if (!valStr || valStr === 'NaN' || valStr === '-') return 0;
 
-                if (valStr.includes('T') && valStr.includes('Z')) {
-                    const timePart = valStr.split('T')[1]?.split('.')[0];
+                // 1. إذا كانت القيمة تاريخ ISO مثل "1899-12-30T08:30:00.000Z"
+                if (typeof cellVal === 'string' && cellVal.includes('T') && cellVal.includes('Z')) {
+                    const timePart = cellVal.split('T')[1]?.split('.')[0];
                     if (timePart) {
-                        const p = timePart.split(':').map(Number);
-                        return ((p[0] || 0) * 3600) + ((p[1] || 0) * 60) + (p[2] || 0);
+                        const [h, m, s] = timePart.split(':').map(Number);
+                        return ((h || 0) * 3600) + ((m || 0) * 60) + (s || 0);
                     }
                 }
 
+                const valStr = String(cellVal).trim();
+                if (!valStr || valStr === 'NaN' || valStr === '-' || valStr === '0') return 0;
+
+                // 2. إذا كانت الصيغة نصية مثل "HH:MM" أو "HH:MM:SS" (مثلاً "10:30" أو "105:15")
                 if (valStr.includes(':')) {
                     const parts = valStr.split(':').map(p => parseFloat(p) || 0);
                     if (parts.length >= 2) {
@@ -186,9 +190,15 @@
                     }
                 }
 
+                // 3. إذا كانت رقم (إما كسر يوم 0.25 = 6 ساعات، أو ساعات مباشرة مثل 8.5)
                 const num = parseFloat(valStr);
                 if (!isNaN(num) && num > 0) {
-                    return num < 1 ? num * 86400 : num * 3600;
+                    // إذا القيمة أصغر من 1 (تمثيل الوقت بالنظام العشري لجوجل شيت)
+                    if (num < 1) {
+                        return Math.round(num * 86400); // 86400 ثانية في اليوم
+                    }
+                    // إذا كان الرقم يعبر عن الساعات مباشرة
+                    return Math.round(num * 3600);
                 }
 
                 return 0;
@@ -209,10 +219,12 @@
 
                 let workDays = 0, notWorkingDays = 0, absDays = 0, susDays = 0, totalHoursSec = 0;
 
+                // قراءة إجمالي الساعات إن كان موجوداً كعمود مستقل في الشيت
                 if (totalHoursIdx !== -1 && row[totalHoursIdx] !== undefined) {
                     totalHoursSec = convertToSeconds(row[totalHoursIdx]);
                 }
 
+                // تجميع بيانات الساعات من الأعمدة اليومية التفصيلية
                 for (let i = 4; i < row.length; i++) {
                     if (i === totalHoursIdx) continue;
                     const cellVal = row[i];
@@ -235,6 +247,7 @@
                         const sec = convertToSeconds(cellVal);
                         if (sec > 0) {
                             workDays++;
+                            // إذا لم ينوجد عمود الإجمالي يجرى تجميعه تلقائياً من الأيام
                             if (totalHoursIdx === -1) {
                                 totalHoursSec += sec;
                             }
@@ -242,8 +255,10 @@
                     }
                 }
 
-                const hours = Math.floor(totalHoursSec / 3600);
-                const mins = Math.floor((totalHoursSec % 3600) / 60);
+                // تحويل الثواني المجمعة إلى ساعات ودقائق بأسلوب دقيق
+                const totalMinsTotal = Math.round(totalHoursSec / 60);
+                const hours = Math.floor(totalMinsTotal / 60);
+                const mins = totalMinsTotal % 60;
 
                 parsedData.push({
                     "كود المندوب": riderId,
