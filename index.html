@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>داشبورد تقرير الأداء والإنتاجية - بث مباشر</title>
+    <title>داشبورد تقرير الأداء والتارجت اليومي</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/Chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -15,19 +15,25 @@
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen">
 
+    <!-- Header -->
     <header class="bg-slate-800 border-b border-slate-700 p-4 sticky top-0 z-50">
         <div class="container mx-auto flex justify-between items-center">
             <div class="flex items-center gap-3">
                 <i class="fa-solid fa-chart-line text-amber-500 text-2xl"></i>
-                <h1 class="text-xl font-bold">داشبورد تقرير الأداء والإنتاجية (مربوط مباشر)</h1>
+                <h1 class="text-xl font-bold">داشبورد متابعة الأداء والتارجت اليومي</h1>
             </div>
             <div id="last-updated" class="text-xs bg-slate-700 px-3 py-1 rounded-full text-slate-300">
-                <i class="fa-solid fa-spinner fa-spin me-1"></i> جاري تحميل البيانات من شيت جوجل...
+                <i class="fa-solid fa-spinner fa-spin me-1"></i> جاري تحميل البيانات...
             </div>
         </div>
     </header>
 
     <div class="container mx-auto p-4 md:p-6 space-y-6">
+
+        <!-- Sheet Switcher Tabs -->
+        <div class="bg-slate-800 p-2 rounded-xl border border-slate-700 flex flex-wrap gap-2" id="sheets-nav-container">
+            <!-- أزرار الشيتات ستظهر هنا -->
+        </div>
 
         <!-- KPI Cards -->
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
@@ -61,9 +67,9 @@
             </div>
         </div>
 
-        <!-- Table & Tabs Section -->
+        <!-- Table & Category Tabs Section -->
         <div class="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
-            <div class="flex overflow-x-auto border-b border-slate-700 bg-slate-800/50 p-2 gap-2" id="tabs-container"></div>
+            <div class="flex overflow-x-auto border-b border-slate-700 bg-slate-800/50 p-2 gap-2" id="category-tabs-container"></div>
 
             <div class="p-4 bg-slate-800/80 border-b border-slate-700 flex flex-wrap gap-4 items-center justify-between">
                 <div class="relative flex-1 min-w-[240px]">
@@ -103,7 +109,27 @@
     </div>
 
     <script>
-        const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQuC0_Wat8ldoeyQIpyDLitB6HTwggTwBCEBlaMhxLqXjUbF8USdV1wYoq6sFrlR0m1i8pYH_WOcdbS/pub?gid=2039215920&single=true&output=csv';
+        // ==========================================
+        // إعدادات الشيتات المصدرية
+        // ==========================================
+        const SHEETS_CONFIG = [
+            {
+                id: 'sheet_performance',
+                name: 'تقرير الأداء الرئيسي',
+                icon: 'fa-chart-line',
+                url: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQuC0_Wat8ldoeyQIpyDLitB6HTwggTwBCEBlaMhxLqXjUbF8USdV1wYoq6sFrlR0m1i8pYH_WOcdbS/pub?gid=2039215920&single=true&output=csv'
+            },
+            {
+                id: 'sheet_daily_target',
+                name: 'التارجت اليومي',
+                icon: 'fa-bullseye',
+                url: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQJcnDyqkCd9Vnuz25FpZ2ZMoF8qJbJ5VruRZyVMr1JdJtjY0dWokxQo6u-h7KRdJB-u9GFUYaEJjD_/pub?gid=0&single=true&output=csv'
+            }
+        ];
+
+        let activeSheetId = SHEETS_CONFIG[0].id;
+        let currentTabCategory = "مش شغال خالص (7 أيام)";
+        let chartInstance = null;
 
         let rawData = {
             "مش شغال خالص (7 أيام)": [],
@@ -113,21 +139,47 @@
             "أداء ضعيف (ساعات قليلة)": []
         };
 
-        let currentTab = Object.keys(rawData)[0];
-        let chartInstance = null;
+        function renderSheetsNav() {
+            const container = document.getElementById('sheets-nav-container');
+            container.innerHTML = '';
 
-        function fetchLiveSheetData() {
-            Papa.parse(CSV_URL, {
+            SHEETS_CONFIG.forEach(sheet => {
+                const isActive = sheet.id === activeSheetId;
+                const btn = document.createElement('button');
+                btn.className = `flex items-center gap-2 px-5 py-2.5 rounded-lg font-bold text-sm transition-all ${
+                    isActive 
+                    ? 'bg-amber-500 text-slate-900 shadow-lg shadow-amber-500/20' 
+                    : 'bg-slate-700/50 text-slate-300 hover:bg-slate-700 hover:text-white'
+                }`;
+                btn.innerHTML = `<i class="fa-solid ${sheet.icon}"></i> ${sheet.name}`;
+                btn.onclick = () => switchSheet(sheet.id);
+                container.appendChild(btn);
+            });
+        }
+
+        function switchSheet(sheetId) {
+            activeSheetId = sheetId;
+            renderSheetsNav();
+            loadActiveSheetData();
+        }
+
+        function loadActiveSheetData() {
+            const sheet = SHEETS_CONFIG.find(s => s.id === activeSheetId);
+            if (!sheet) return;
+
+            document.getElementById('last-updated').innerHTML = `<i class="fa-solid fa-spinner fa-spin me-1"></i> جاري تحميل ${sheet.name}...`;
+
+            Papa.parse(sheet.url, {
                 download: true,
                 header: true,
                 skipEmptyLines: true,
                 complete: function(results) {
                     processSheetData(results.data);
-                    document.getElementById('last-updated').innerHTML = `<i class="fa-regular fa-clock me-1"></i> تم تحديث البيانات تلقائياً: ${new Date().toLocaleTimeString('ar-EG')}`;
+                    document.getElementById('last-updated').innerHTML = `<i class="fa-regular fa-clock me-1"></i> ${sheet.name} (تم التحديث: ${new Date().toLocaleTimeString('ar-EG')})`;
                 },
                 error: function(err) {
                     console.error("خطأ أثناء جلب البيانات:", err);
-                    document.getElementById('last-updated').innerHTML = `<i class="fa-solid fa-circle-exclamation text-red-400 me-1"></i> تعذر تحديث البيانات تلقائياً`;
+                    document.getElementById('last-updated').innerHTML = `<i class="fa-solid fa-circle-exclamation text-red-400 me-1"></i> فشل جلب بيانات ${sheet.name}`;
                 }
             });
         }
@@ -138,11 +190,9 @@
         }
 
         function processSheetData(rows) {
-            // Reset Arrays
             Object.keys(rawData).forEach(key => rawData[key] = []);
 
             rows.forEach(row => {
-                // Read CSV Columns flexible naming
                 const code = row['كود المندوب'] || row['كود'] || row['Code'] || '';
                 const name = row['الاسم'] || row['اسم المندوب'] || row['Name'] || '';
                 const zone = row['المنطقة'] || row['Zone'] || '';
@@ -165,29 +215,18 @@
                     "عدد أيام الإيقاف": suspendedDays
                 };
 
-                if (!code && !name) return; // ignore empty rows
+                if (!code && !name) return;
 
-                // Categorization logic
-                if (workDays === 0) {
-                    rawData["مش شغال خالص (7 أيام)"].push(item);
-                }
-                if (suspendedDays > 0) {
-                    rawData["موقوف"].push(item);
-                }
-                if (absRecorded > 0) {
-                    rawData["غياب متكرر"].push(item);
-                }
-                if (workDays === 1 || workDays === 2) {
-                    rawData["أيام عمل قليلة (1-2)"].push(item);
-                }
-                if (workDays > 2 && avgHours !== '-' && parseNum(avgHours) < 6) {
-                    rawData["أداء ضعيف (ساعات قليلة)"].push(item);
-                }
+                if (workDays === 0) rawData["مش شغال خالص (7 أيام)"].push(item);
+                if (suspendedDays > 0) rawData["موقوف"].push(item);
+                if (absRecorded > 0) rawData["غياب متكرر"].push(item);
+                if (workDays === 1 || workDays === 2) rawData["أيام عمل قليلة (1-2)"].push(item);
+                if (workDays > 2 && avgHours !== '-' && parseNum(avgHours) < 6) rawData["أداء ضعيف (ساعات قليلة)"].push(item);
             });
 
             updateKPIs();
             renderChart();
-            renderTabs();
+            renderCategoryTabs();
             renderTable();
         }
 
@@ -232,21 +271,21 @@
             });
         }
 
-        function renderTabs() {
-            const tabsContainer = document.getElementById('tabs-container');
-            tabsContainer.innerHTML = '';
+        function renderCategoryTabs() {
+            const container = document.getElementById('category-tabs-container');
+            container.innerHTML = '';
             
-            Object.keys(rawData).forEach((sheetName) => {
+            Object.keys(rawData).forEach((categoryName) => {
                 const btn = document.createElement('button');
-                const isActive = sheetName === currentTab;
+                const isActive = categoryName === currentTabCategory;
                 btn.className = `px-4 py-2 text-sm font-semibold rounded-lg transition whitespace-nowrap ${isActive ? 'bg-amber-500 text-slate-900' : 'text-slate-400 hover:bg-slate-700 hover:text-slate-200'}`;
-                btn.innerText = `${sheetName} (${rawData[sheetName].length})`;
+                btn.innerText = `${categoryName} (${rawData[categoryName].length})`;
                 btn.onclick = () => {
-                    currentTab = sheetName;
-                    renderTabs();
+                    currentTabCategory = categoryName;
+                    renderCategoryTabs();
                     renderTable();
                 };
-                tabsContainer.appendChild(btn);
+                container.appendChild(btn);
             });
         }
 
@@ -255,7 +294,7 @@
             const searchVal = document.getElementById('search-input').value.toLowerCase();
             tbody.innerHTML = '';
 
-            const list = rawData[currentTab] || [];
+            const list = rawData[currentTabCategory] || [];
             const filteredData = list.filter(item => {
                 return String(item["كود المندوب"]).includes(searchVal) ||
                        String(item["الاسم"]).toLowerCase().includes(searchVal) ||
@@ -290,8 +329,9 @@
 
         document.getElementById('search-input').addEventListener('input', renderTable);
         
-        // Initial Fetch
-        fetchLiveSheetData();
+        // Initial Start
+        renderSheetsNav();
+        loadActiveSheetData();
     </script>
 </body>
 </html>
