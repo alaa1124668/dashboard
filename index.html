@@ -21,7 +21,7 @@
                 <h1 class="text-xl font-bold">داشبورد متابعة الأداء والتارجت اليومي</h1>
             </div>
             <div id="last-updated" class="text-xs bg-slate-700 px-3 py-1 rounded-full text-slate-300">
-                <i class="fa-solid fa-spinner fa-spin me-1"></i> جاري جلب البيانات...
+                <i class="fa-solid fa-spinner fa-spin me-1"></i> جاري تحميل البيانات...
             </div>
         </div>
     </header>
@@ -53,7 +53,7 @@
                 <h3 id="kpi-4" class="text-2xl font-extrabold text-sky-400 mt-1">0</h3>
             </div>
             <div class="bg-slate-800 p-4 rounded-xl border border-slate-700">
-                <p class="text-slate-400 text-xs">أداء ضعيف (ساعات)</p>
+                <p class="text-slate-400 text-xs">أداء ضعيف (ساعات قليلة)</p>
                 <h3 id="kpi-5" class="text-2xl font-extrabold text-purple-400 mt-1">0</h3>
             </div>
         </div>
@@ -81,17 +81,17 @@
 
             <div class="overflow-x-auto">
                 <table class="w-full text-sm text-right text-slate-300">
-                    <thead id="table-head" class="text-xs uppercase bg-slate-900/80 text-slate-400 border-b border-slate-700">
+                    <thead class="text-xs uppercase bg-slate-900/80 text-slate-400 border-b border-slate-700">
                         <tr>
-                            <th class="px-4 py-3">كود المندوب</th>
-                            <th class="px-4 py-3">اسم المندوب</th>
-                            <th class="px-4 py-3">المنطقة</th>
-                            <th class="px-4 py-3">المشرف</th>
+                            <th class="px-4 py-3">Rider ID</th>
+                            <th class="px-4 py-3">Rider Name</th>
+                            <th class="px-4 py-3">Zone</th>
+                            <th class="px-4 py-3">اسم المشرف</th>
                             <th class="px-4 py-3 text-center">أيام العمل</th>
                             <th class="px-4 py-3 text-center">أيام عدم العمل</th>
-                            <th class="px-4 py-3 text-center">متوسط الساعات</th>
-                            <th class="px-4 py-3 text-center">الغياب المسجل</th>
-                            <th class="px-4 py-3 text-center">أيام الإيقاف</th>
+                            <th class="px-4 py-3 text-center">إجمالي الساعات</th>
+                            <th class="px-4 py-3 text-center">الغياب</th>
+                            <th class="px-4 py-3 text-center">الإيقاف</th>
                         </tr>
                     </thead>
                     <tbody id="table-body" class="divide-y divide-slate-700/50">
@@ -106,7 +106,6 @@
     </div>
 
     <script>
-        // إعداد الشيتات باستخدام معرّف Document ID و GID المباشر لتجاوز CORS
         const SHEETS_CONFIG = [
             {
                 id: 'sheet_performance',
@@ -130,7 +129,7 @@
 
         let rawData = {
             "كل البيانات": [],
-            "مش شغال خالص (7 أيام)": [],
+            "مش شغال خالص": [],
             "موقوف": [],
             "غياب متكرر": [],
             "أيام عمل قليلة (1-2)": [],
@@ -172,96 +171,126 @@
 
             document.getElementById('last-updated').innerHTML = `<i class="fa-solid fa-spinner fa-spin me-1"></i> جاري تحميل ${sheet.name}...`;
 
-            // إزالة السكريبت القديم إن وجد
             const oldScript = document.getElementById('gsheet-script');
             if (oldScript) oldScript.remove();
 
-            // إنشاء سكريبت JSONP يتخطى CORS تماماً
             const script = document.createElement('script');
             script.id = 'gsheet-script';
             script.src = `https://docs.google.com/spreadsheets/d/${sheet.docId}/gviz/tq?tqx=responseHandler:handleGvizData&gid=${sheet.gid}`;
             script.onerror = () => {
-                showError('تعذر تحميل البيانات من جوجل شيت. تأكد من إعدادات مشاركة الشيت.');
+                showError('تعذر تحميل البيانات من جوجل شيت.');
                 document.getElementById('last-updated').innerHTML = `<i class="fa-solid fa-circle-exclamation text-red-400 me-1"></i> خطأ التحميل`;
             };
             document.body.appendChild(script);
         }
 
-        // Global callback handler لجوجل شيت
         window.handleGvizData = function(gvizData) {
             try {
                 if (!gvizData || !gvizData.table) {
-                    showError('البيانات المستلمة غير صالحة.');
+                    showError('البيانات غير صالحة.');
                     return;
                 }
 
+                // قراءة الصفوف العادية
                 const cols = gvizData.table.cols.map(c => (c ? c.label || '' : ''));
-                const rows = gvizData.table.rows.map(r => {
-                    let rowObj = {};
-                    r.c.forEach((cell, idx) => {
-                        const colName = cols[idx] || `col_${idx}`;
-                        rowObj[colName] = cell ? (cell.v !== null && cell.v !== undefined ? cell.v : '') : '';
+                const rawRows = gvizData.table.rows;
+
+                // مطابقة عناوين الأعمدة بناءً على الصورة
+                let riderIdIdx = cols.findIndex(c => c.toLowerCase().includes('rider id') || c.includes('كود'));
+                let riderNameIdx = cols.findIndex(c => c.toLowerCase().includes('rider name') || c.includes('اسم'));
+                let zoneIdx = cols.findIndex(c => c.toLowerCase().includes('zone') || c.includes('منطقة'));
+                let supervisorIdx = cols.findIndex(c => c.includes('المشرف') || c.toLowerCase().includes('supervisor'));
+
+                if (riderIdIdx === -1) riderIdIdx = 0;
+                if (riderNameIdx === -1) riderNameIdx = 1;
+                if (zoneIdx === -1) zoneIdx = 2;
+                if (supervisorIdx === -1) supervisorIdx = 3;
+
+                let parsedData = [];
+
+                rawRows.forEach(r => {
+                    if (!r.c) return;
+                    
+                    const riderId = r.c[riderIdIdx] ? r.c[riderIdIdx].v : '';
+                    const riderName = r.c[riderNameIdx] ? r.c[riderNameIdx].v : '';
+                    const zone = r.c[zoneIdx] ? r.c[zoneIdx].v : '';
+                    const supervisor = r.c[supervisorIdx] ? r.c[supervisorIdx].v : '';
+
+                    if (!riderId && !riderName) return;
+
+                    let workDays = 0;
+                    let notWorkingDays = 0;
+                    let absDays = 0;
+                    let susDays = 0;
+                    let totalHoursSec = 0;
+
+                    // مسح باقي أعمدة التواريخ (ابتداءً من العمود رقم 4)
+                    for (let i = 4; i < r.c.length; i++) {
+                        const cell = r.c[i];
+                        if (!cell || cell.v === null || cell.v === undefined) continue;
+
+                        const val = String(cell.v).trim();
+                        const formatted = cell.f || val;
+
+                        if (val === 'غياب' || formatted.includes('غياب')) {
+                            absDays++;
+                            notWorkingDays++;
+                        } else if (val === 'موقوف' || formatted.includes('موقوف')) {
+                            susDays++;
+                            notWorkingDays++;
+                        } else if (val === 'مش مختار' || formatted.includes('مش مختار')) {
+                            notWorkingDays++;
+                        } else if (typeof cell.v === 'number' || val.includes(':')) {
+                            // حساب الساعات
+                            workDays++;
+                            if (typeof cell.v === 'number') {
+                                totalHoursSec += cell.v * 86400; // تحويل من كسور تاريخ إلى ثواني
+                            } else {
+                                const parts = val.split(':').map(Number);
+                                if (parts.length >= 2) {
+                                    totalHoursSec += (parts[0] * 3600) + (parts[1] * 60) + (parts[2] || 0);
+                                }
+                            }
+                        }
+                    }
+
+                    const hours = Math.floor(totalHoursSec / 3600);
+                    const mins = Math.floor((totalHoursSec % 3600) / 60);
+                    const formattedHours = `${hours}:${mins < 10 ? '0' : ''}${mins}`;
+
+                    parsedData.push({
+                        "كود المندوب": riderId,
+                        "الاسم": riderName,
+                        "المنطقة": zone,
+                        "المشرف": supervisor,
+                        "أيام العمل": workDays,
+                        "أيام عدم العمل": notWorkingDays,
+                        "إجمالي الساعات": formattedHours,
+                        "ساعات بالثواني": totalHoursSec,
+                        "الغياب": absDays,
+                        "الإيقاف": susDays
                     });
-                    return rowObj;
                 });
 
+                processSheetData(parsedData);
                 const sheet = SHEETS_CONFIG.find(s => s.id === activeSheetId);
-                processSheetData(rows);
                 document.getElementById('last-updated').innerHTML = `<i class="fa-regular fa-clock me-1"></i> ${sheet.name} (تم التحديث: ${new Date().toLocaleTimeString('ar-EG')})`;
             } catch (err) {
                 console.error(err);
-                showError('حدث خطأ أثناء معالجة البيانات: ' + err.message);
+                showError('حدث خطأ أثناء معالجة بيانات الشيت: ' + err.message);
             }
         };
 
-        function getValue(row, keys) {
-            for (let rKey in row) {
-                for (let k of keys) {
-                    if (rKey.trim().toLowerCase().includes(k.toLowerCase())) {
-                        return row[rKey];
-                    }
-                }
-            }
-            return '';
-        }
-
-        function parseNum(val) {
-            let n = parseFloat(val);
-            return isNaN(n) ? 0 : n;
-        }
-
-        function processSheetData(rows) {
+        function processSheetData(items) {
             Object.keys(rawData).forEach(key => rawData[key] = []);
 
-            rows.forEach(row => {
-                const code = getValue(row, ['كود', 'code', 'id']) || '-';
-                const name = getValue(row, ['اسم', 'name', 'مندوب']) || '-';
-                const zone = getValue(row, ['منطقة', 'zone', 'فرع', 'المنطقة']) || '-';
-                const supervisor = getValue(row, ['مشرف', 'supervisor', 'المشرف']) || '-';
-                const workDays = parseNum(getValue(row, ['عمل', 'work', 'أيام']));
-                const offDays = parseNum(getValue(row, ['غياب', 'عدم', 'off']));
-                const avgHours = getValue(row, ['ساعات', 'hours', 'متوسط']) || '0';
-                const absRecorded = parseNum(getValue(row, ['الغياب المسجل', 'absent']));
-                const suspendedDays = parseNum(getValue(row, ['إيقاف', 'ايقاف', 'suspended']));
-
-                const item = {
-                    "كود المندوب": code,
-                    "الاسم": name,
-                    "المنطقة": zone,
-                    "المشرف": supervisor,
-                    "أيام العمل": workDays,
-                    "أيام الغياب/عدم العمل": offDays,
-                    "متوسط ساعات العمل": avgHours,
-                    "عدد أيام الغياب المسجل": absRecorded,
-                    "عدد أيام الإيقاف": suspendedDays
-                };
-
+            items.forEach(item => {
                 rawData["كل البيانات"].push(item);
-                if (workDays === 0) rawData["مش شغال خالص (7 أيام)"].push(item);
-                if (suspendedDays > 0) rawData["موقوف"].push(item);
-                if (absRecorded > 0) rawData["غياب متكرر"].push(item);
-                if (workDays === 1 || workDays === 2) rawData["أيام عمل قليلة (1-2)"].push(item);
-                if (workDays > 2 && parseNum(avgHours) < 6) rawData["أداء ضعيف (ساعات قليلة)"].push(item);
+                if (item["أيام العمل"] === 0) rawData["مش شغال خالص"].push(item);
+                if (item["الإيقاف"] > 0) rawData["موقوف"].push(item);
+                if (item["الغياب"] > 0) rawData["غياب متكرر"].push(item);
+                if (item["أيام العمل"] === 1 || item["أيام العمل"] === 2) rawData["أيام عمل قليلة (1-2)"].push(item);
+                if (item["أيام العمل"] > 2 && item["ساعات بالثواني"] < (item["أيام العمل"] * 6 * 3600)) rawData["أداء ضعيف (ساعات قليلة)"].push(item);
             });
 
             updateKPIs();
@@ -271,7 +300,7 @@
         }
 
         function updateKPIs() {
-            document.getElementById('kpi-1').innerText = rawData["مش شغال خالص (7 أيام)"].length;
+            document.getElementById('kpi-1').innerText = rawData["مش شغال خالص"].length;
             document.getElementById('kpi-2').innerText = rawData["موقوف"].length;
             document.getElementById('kpi-3').innerText = rawData["غياب متكرر"].length;
             document.getElementById('kpi-4').innerText = rawData["أيام عمل قليلة (1-2)"].length;
@@ -282,7 +311,7 @@
             const ctx = document.getElementById('performanceChart').getContext('2d');
             if (chartInstance) chartInstance.destroy();
 
-            const categories = ["مش شغال خالص (7 أيام)", "موقوف", "غياب متكرر", "أيام عمل قليلة (1-2)", "أداء ضعيف (ساعات قليلة)"];
+            const categories = ["مش شغال خالص", "موقوف", "غياب متكرر", "أيام عمل قليلة (1-2)", "أداء ضعيف (ساعات قليلة)"];
 
             chartInstance = new Chart(ctx, {
                 type: 'bar',
@@ -360,10 +389,10 @@
                     <td class="px-4 py-3"><span class="bg-slate-700 text-slate-300 px-2 py-0.5 rounded text-xs">${item["المنطقة"]}</span></td>
                     <td class="px-4 py-3 text-slate-400">${item["المشرف"]}</td>
                     <td class="px-4 py-3 text-center font-bold text-slate-200">${item["أيام العمل"]}</td>
-                    <td class="px-4 py-3 text-center text-slate-400">${item["أيام الغياب/عدم العمل"]}</td>
-                    <td class="px-4 py-3 text-center font-mono">${item["متوسط ساعات العمل"]}</td>
-                    <td class="px-4 py-3 text-center text-slate-300">${item["عدد أيام الغياب المسجل"]}</td>
-                    <td class="px-4 py-3 text-center text-slate-300">${item["عدد أيام الإيقاف"]}</td>
+                    <td class="px-4 py-3 text-center text-slate-400">${item["أيام عدم العمل"]}</td>
+                    <td class="px-4 py-3 text-center font-mono">${item["إجمالي الساعات"]}</td>
+                    <td class="px-4 py-3 text-center text-slate-300">${item["الغياب"]}</td>
+                    <td class="px-4 py-3 text-center text-slate-300">${item["الإيقاف"]}</td>
                 `;
                 tbody.appendChild(tr);
             });
