@@ -143,49 +143,49 @@
             document.getElementById('error-banner').classList.remove('hidden');
         }
 
-        async function loadSheetData() {
+        function loadSheetData() {
             hideError();
             document.getElementById('last-updated').innerHTML = `<i class="fa-solid fa-spinner fa-spin me-1"></i> جاري تحديث البيانات...`;
 
-            try {
-                const response = await fetch(API_URL, { redirect: 'follow' });
-                if (!response.ok) throw new Error('فشل جلب البيانات');
-                
-                const rows = await response.json();
-                
+            // استخدام JSONP لتخطي قيود CORS في المتصفح
+            const callbackName = 'handleApiResponse';
+            window[callbackName] = function(rows) {
+                delete window[callbackName];
+                const oldScript = document.getElementById('jsonp-script');
+                if (oldScript) oldScript.remove();
+
                 if (Array.isArray(rows) && rows.length > 2) {
                     parsePerformanceSheetData(rows);
                     document.getElementById('last-updated').innerHTML = `<i class="fa-regular fa-clock me-1"></i> آخر تحديث: ${new Date().toLocaleTimeString('ar-EG')}`;
                 } else {
-                    showError('البيانات المستلمة فارغة أو لا تحتوي على صفوف كافية.');
+                    showError('البيانات المستلمة فارغة أو التنسيق غير صحيح.');
                 }
-            } catch (err) {
-                console.error(err);
-                showError('تعذر جلب البيانات من Apps Script.');
+            };
+
+            const script = document.createElement('script');
+            script.id = 'jsonp-script';
+            script.src = `${API_URL}?prefix=${callbackName}`;
+            script.onerror = function() {
+                showError('تعذر جلب البيانات من Apps Script. تأكد من إعدادات النشر على وضع (Anyone).');
                 document.getElementById('last-updated').innerHTML = `<i class="fa-solid fa-circle-exclamation text-red-400 me-1"></i> خطأ التحميل`;
-            }
+            };
+            document.body.appendChild(script);
         }
 
-        function formatDayLabel(val) {
-            if (!val) return '';
-            const str = String(val).trim();
-            
-            if (str.includes('T') && str.includes('Z')) {
-                const d = new Date(str);
-                if (!isNaN(d.getTime())) {
-                    return String(d.getDate()); 
-                }
+        function convertToSeconds(valStr) {
+            if (!valStr || valStr === 'NaN' || valStr === '-' || valStr === '0') return 0;
+            const str = String(valStr).trim();
+            if (str.includes(':')) {
+                const parts = str.split(':').map(p => parseFloat(p) || 0);
+                if (parts.length === 3) return (parts[0] * 3600) + (parts[1] * 60) + parts[2];
+                if (parts.length === 2) return (parts[0] * 3600) + (parts[1] * 60);
             }
-            
-            if (str.includes('-') || str.includes('/')) {
-                const parts = str.split(/[T\s]/)[0].split(/[-/]/);
-                if (parts.length === 3) {
-                    const dayNum = parts[0].length === 4 ? parts[2] : parts[0];
-                    return parseInt(dayNum, 10).toString();
-                }
+            const num = parseFloat(str);
+            if (!isNaN(num) && num > 0) {
+                if (num < 1) return Math.round(num * 86400);
+                return Math.round(num * 3600);
             }
-
-            return str;
+            return 0;
         }
 
         function parsePerformanceSheetData(rows) {
@@ -214,49 +214,12 @@
                 if (i === totalHoursIdx) continue;
                 const rawDayVal = (dayRow && dayRow[i] !== undefined) ? String(dayRow[i]).trim() : '';
                 if (rawDayVal !== '' && rawDayVal.toLowerCase() !== 'nan') {
-                    const cleanDayLabel = formatDayLabel(rawDayVal);
                     validDayCols.push(i);
-                    dayColLabelMap.set(i, cleanDayLabel);
+                    dayColLabelMap.set(i, rawDayVal);
                 }
             }
 
-            dayLabelsList = validDayCols
-                .map(i => dayColLabelMap.get(i))
-                .sort((a, b) => parseInt(a, 10) - parseInt(b, 10));
-
-            // معالجة دقيقة لتحويل أوقات الساعات إلى ثواني
-            function convertToSeconds(cellVal) {
-                if (cellVal === null || cellVal === undefined) return 0;
-
-                if (typeof cellVal === 'string' && cellVal.includes('T')) {
-                    const d = new Date(cellVal);
-                    if (!isNaN(d.getTime())) {
-                        return (d.getHours() * 3600) + (d.getMinutes() * 60) + d.getSeconds();
-                    }
-                }
-
-                const valStr = String(cellVal).trim();
-                if (!valStr || valStr === 'NaN' || valStr === '-' || valStr === '0') return 0;
-
-                if (valStr.includes(':')) {
-                    const parts = valStr.split(':').map(p => parseFloat(p) || 0);
-                    if (parts.length === 3) {
-                        return (parts[0] * 3600) + (parts[1] * 60) + parts[2];
-                    } else if (parts.length === 2) {
-                        return (parts[0] * 3600) + (parts[1] * 60);
-                    }
-                }
-
-                const num = parseFloat(valStr);
-                if (!isNaN(num) && num > 0) {
-                    if (num < 1) {
-                        return Math.round(num * 86400);
-                    }
-                    return Math.round(num * 3600);
-                }
-
-                return 0;
-            }
+            dayLabelsList = validDayCols.map(i => dayColLabelMap.get(i));
 
             let parsedData = [];
 
@@ -269,15 +232,14 @@
                 const zone = row[zoneIdx] !== undefined ? String(row[zoneIdx]).trim() : '';
                 const supervisor = row[supervisorIdx] !== undefined ? String(row[supervisorIdx]).trim() : '';
 
-                if ((!riderId && !riderName) || riderId.toLowerCase() === 'rider id' || riderName.toLowerCase() === 'rider name') continue;
+                if ((!riderId && !riderName) || riderId.toLowerCase() === 'rider id') continue;
 
                 let workDays = 0, notWorkingDays = 0, absDays = 0, susDays = 0, notSelectedDays = 0, totalHoursSec = 0;
                 const dayDetails = {};
 
                 validDayCols.forEach(i => {
                     const label = dayColLabelMap.get(i);
-                    const cellVal = row[i];
-                    const val = (cellVal === null || cellVal === undefined) ? '' : String(cellVal).trim();
+                    const val = row[i] !== undefined ? String(row[i]).trim() : '';
 
                     let statusForDay = 'بدون بيانات';
                     let hoursForDay = 0;
@@ -287,19 +249,16 @@
                             absDays++;
                             notWorkingDays++;
                             statusForDay = 'غياب';
-                        }
-                        else if (val.includes('موقوف')) {
+                        } else if (val.includes('موقوف')) {
                             susDays++;
                             notWorkingDays++;
                             statusForDay = 'موقوف';
-                        }
-                        else if (val.includes('مش مختار')) {
+                        } else if (val.includes('مش مختار')) {
                             notSelectedDays++;
                             notWorkingDays++;
                             statusForDay = 'مش مختار';
-                        }
-                        else {
-                            const sec = convertToSeconds(cellVal);
+                        } else {
+                            const sec = convertToSeconds(val);
                             if (sec > 0) {
                                 workDays++;
                                 totalHoursSec += sec;
@@ -364,20 +323,9 @@
             const supervisorSelect = document.getElementById('supervisor-filter');
             const daySelect = document.getElementById('day-filter');
 
-            const currentZone = zoneSelect.value;
-            const currentSupervisor = supervisorSelect.value;
-            const currentDay = daySelect.value;
-
-            zoneSelect.innerHTML = '<option value="">كل المناطق</option>' +
-                zones.map(z => `<option value="${z}">${z}</option>`).join('');
-            supervisorSelect.innerHTML = '<option value="">كل المشرفين</option>' +
-                supervisors.map(s => `<option value="${s}">${s}</option>`).join('');
-            daySelect.innerHTML = '<option value="">كل الشهر (بدون تحديد يوم)</option>' +
-                dayLabelsList.map(d => `<option value="${d}">يوم ${d}</option>`).join('');
-
-            if (zones.includes(currentZone)) zoneSelect.value = currentZone;
-            if (supervisors.includes(currentSupervisor)) supervisorSelect.value = currentSupervisor;
-            if (dayLabelsList.includes(currentDay)) daySelect.value = currentDay;
+            zoneSelect.innerHTML = '<option value="">كل المناطق</option>' + zones.map(z => `<option value="${z}">${z}</option>`).join('');
+            supervisorSelect.innerHTML = '<option value="">كل المشرفين</option>' + supervisors.map(s => `<option value="${s}">${s}</option>`).join('');
+            daySelect.innerHTML = '<option value="">كل الشهر (بدون تحديد يوم)</option>' + dayLabelsList.map(d => `<option value="${d}">يوم ${d}</option>`).join('');
         }
 
         function updateKPIs() {
