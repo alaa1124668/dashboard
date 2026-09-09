@@ -230,24 +230,32 @@
                 let rawDayVal = (dayRow && dayRow[i] !== undefined) ? String(dayRow[i]).trim() : '';
 
                 if (rawDayVal !== '' && rawDayVal.toLowerCase() !== 'nan') {
-                    if (rawDayVal.includes('T')) {
-                        const datePart = rawDayVal.split('T')[0];
-                        const parts = datePart.split('-');
-                        if (parts.length === 3) {
-                            const day = parts[2].padStart(2, '0');
-                            const month = parts[1].padStart(2, '0');
-                            rawDayVal = `${day}/${month}`;
-                        } else {
-                            const dateObj = new Date(rawDayVal);
-                            if (!isNaN(dateObj.getTime())) {
-                                const day = String(dateObj.getDate()).padStart(2, '0');
-                                const month = String(dateObj.getMonth() + 1).padStart(2, '0');
-                                rawDayVal = `${day}/${month}`;
-                            }
+                    let formattedDay = '';
+
+                    // تحليل النص بـ Regex بدقة لتفادي مشكلة تحويل التوقيت
+                    const match = rawDayVal.match(/(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+                    if (match) {
+                        const day = match[3].padStart(2, '0');
+                        const month = match[2].padStart(2, '0');
+                        formattedDay = `${day}/${month}`;
+                    } else if (rawDayVal.includes('/')) {
+                        const p = rawDayVal.split('/');
+                        if (p.length >= 2) {
+                            const day = p[0].padStart(2, '0');
+                            const month = p[1].padStart(2, '0');
+                            formattedDay = `${day}/${month}`;
                         }
                     }
+
+                    if (!formattedDay) formattedDay = rawDayVal;
+
+                    // استبعاد تاريخ شهر 8 نهائياً
+                    if (formattedDay.endsWith('/08') || formattedDay === '31/08') {
+                        continue;
+                    }
+
                     validDayCols.push(i);
-                    dayColLabelMap.set(i, rawDayVal);
+                    dayColLabelMap.set(i, formattedDay);
                 }
             }
 
