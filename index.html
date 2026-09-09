@@ -172,49 +172,55 @@
             document.body.appendChild(script);
         }
 
-        function parseTimeToSeconds(valStr) {
-            if (!valStr || valStr === 'NaN' || valStr === '-' || valStr === '0') return 0;
+        // دالة تحويل نصوص الساعات المعقدة والتاريخ لتنسيق الوقت السليم
+        function cleanTimeFormat(valStr) {
+            if (!valStr || valStr === 'NaN' || valStr === '-' || valStr === '0') return '00:00';
             const str = String(valStr).trim();
 
+            // التعامل مع القيمة لو كانت جاية كـ Date string من الشيت
             if (str.includes('T')) {
-                const parts = str.split('T')[1];
-                if (parts) {
-                    const timeComponents = parts.split('.')[0].split(':').map(p => parseFloat(p) || 0);
-                    if (timeComponents.length >= 2) {
-                        return (timeComponents[0] * 3600) + (timeComponents[1] * 60) + (timeComponents[2] || 0);
+                const timePart = str.split('T')[1];
+                if (timePart) {
+                    const cleanParts = timePart.split('.')[0].split(':');
+                    if (cleanParts.length >= 2) {
+                        let hours = parseInt(cleanParts[0], 10) || 0;
+                        let mins = parseInt(cleanParts[1], 10) || 0;
+
+                        // معالجة الأيام الزائدة لو القيمة اتجاوزت 24 ساعة
+                        const datePart = str.split('T')[0];
+                        if (datePart.startsWith('1899-12-31')) hours += 24;
+                        else if (datePart.startsWith('1900-01-01')) hours += 48;
+                        else if (datePart.startsWith('1900-01-02')) hours += 72;
+
+                        return `${hours}:${mins < 10 ? '0' : ''}${mins}`;
                     }
                 }
             }
 
+            // لو النص عادي بتنسيق HH:MM أو HH:MM:SS
             if (str.includes(':')) {
-                const parts = str.split(':').map(p => parseFloat(p) || 0);
-                if (parts.length === 3) return (parts[0] * 3600) + (parts[1] * 60) + parts[2];
-                if (parts.length === 2) return (parts[0] * 3600) + (parts[1] * 60);
+                const parts = str.split(':');
+                if (parts.length >= 2) {
+                    return `${parts[0]}:${parts[1]}`;
+                }
             }
 
-            const num = parseFloat(str);
-            if (!isNaN(num) && num > 0) {
-                if (num < 1) return Math.round(num * 86400);
-                if (num <= 24) return Math.round(num * 3600);
-            }
-            return 0;
+            return str;
         }
 
         function parsePerformanceSheetData(rows) {
             if (!rows || rows.length < 3) return;
 
-            // الصف رقم 2 في الشيت هو الصف ذو الفهرس 1 في المصفوفة (rows[1])
-            const dayRow = rows[1];
+            const dayRow = rows[1]; // الصف رقم 2
 
-            // تحويل اسم العمود إلى فهرس (A=0 ... E=4, AI=34, AM=38)
             const DAY_COL_START = 4;  // Column E
             const DAY_COL_END = 34;   // Column AI
-            const AM_COL_INDEX = 38;  // Column AM
+            const AM_COL_INDEX = 38;  // Column AM (إجمالي الساعات)
 
             let validDayCols = [];
             const dayColLabelMap = new Map();
 
-            // استخراج التواريخ حصراً من الصف رقم 2 (الأعمدة E إلى AI)
+            // قراءة التواريخ من الصف الثاني من E إلى AI
             for (let i = DAY_COL_START; i <= DAY_COL_END; i++) {
                 let rawDayVal = (dayRow && dayRow[i] !== undefined) ? String(dayRow[i]).trim() : '';
 
@@ -223,16 +229,15 @@
                     let monthNum = 9;
                     let yearNum = 2026;
 
-                    // معالجة سلسلة التاريخ نصياً لمنع أي ترحيل بسبب Time Zone
                     const cleanStr = rawDayVal.split('T')[0];
                     const parts = cleanStr.match(/\d+/g);
 
                     if (parts && parts.length >= 3) {
-                        if (parts[0].length === 4) { // YYYY-MM-DD
+                        if (parts[0].length === 4) {
                             yearNum = parseInt(parts[0], 10);
                             monthNum = parseInt(parts[1], 10);
                             dayNum = parseInt(parts[2], 10);
-                        } else { // M/D/YYYY
+                        } else {
                             monthNum = parseInt(parts[0], 10);
                             dayNum = parseInt(parts[1], 10);
                             yearNum = parseInt(parts[2], 10);
@@ -244,7 +249,7 @@
                         dayNum = parseInt(parts[0], 10);
                     }
 
-                    if (dayNum && dayNum >= 1 && dayNum <= 31) {
+                    if (dayNum && dayNum >= 1 && dayNum <= 30 && monthNum === 9) {
                         const formattedDay = `${String(dayNum).padStart(2, '0')}/${String(monthNum).padStart(2, '0')}/${yearNum}`;
                         validDayCols.push(i);
                         dayColLabelMap.set(i, formattedDay);
@@ -268,7 +273,6 @@
                 if ((!riderId && !riderName) || riderId.toLowerCase() === 'rider id') continue;
 
                 let workDays = 0, notWorkingDays = 0, absDays = 0, susDays = 0, notSelectedDays = 0;
-                let calculatedTotalSec = 0;
                 const dayDetails = {};
 
                 validDayCols.forEach(i => {
@@ -276,7 +280,6 @@
                     const val = row[i] !== undefined ? String(row[i]).trim() : '';
 
                     let statusForDay = 'بدون بيانات';
-                    let hoursForDay = 0;
 
                     if (val && val !== 'NaN') {
                         if (val.includes('غياب')) {
@@ -292,30 +295,17 @@
                             notWorkingDays++;
                             statusForDay = 'مش مختار';
                         } else {
-                            const sec = parseTimeToSeconds(val);
-                            if (sec > 0) {
-                                workDays++;
-                                calculatedTotalSec += sec;
-                                statusForDay = 'شغال';
-                                hoursForDay = sec;
-                            }
+                            workDays++;
+                            statusForDay = 'شغال';
                         }
                     }
 
-                    dayDetails[label] = { status: statusForDay, hours: hoursForDay };
+                    dayDetails[label] = { status: statusForDay, rawValue: val };
                 });
 
-                // قراءة القيمة الجاهزة المكتوبة مباشرة من العامود AM
+                // قراءة القيمة من العمود AM وتنظيف صيغة الوقت فوراً
                 let rawAMVal = row[AM_COL_INDEX] !== undefined ? String(row[AM_COL_INDEX]).trim() : '';
-                let displayTotalHours = rawAMVal;
-
-                // إذا كان العامود AM فارغاً، يتم استخدام الحساب التلقائي كبديل احتياطي
-                if (!displayTotalHours || displayTotalHours === 'NaN' || displayTotalHours === '-') {
-                    const totalMins = Math.floor(calculatedTotalSec / 60);
-                    const h = Math.floor(totalMins / 60);
-                    const m = totalMins % 60;
-                    displayTotalHours = `${h}:${m < 10 ? '0' : ''}${m}`;
-                }
+                let displayTotalHours = cleanTimeFormat(rawAMVal);
 
                 parsedData.push({
                     "كود المندوب": riderId,
@@ -325,7 +315,6 @@
                     "أيام العمل": workDays,
                     "أيام عدم العمل": notWorkingDays,
                     "إجمالي الساعات": displayTotalHours,
-                    "ساعات بالثواني": calculatedTotalSec,
                     "الغياب": absDays,
                     "الإيقاف": susDays,
                     "مش مختار": notSelectedDays,
@@ -345,7 +334,6 @@
                 if (item["الإيقاف"] > 0) rawData["موقوف"].push(item);
                 if (item["الغياب"] > 0) rawData["غياب متكرر"].push(item);
                 if (item["أيام العمل"] === 1 || item["أيام العمل"] === 2) rawData["أيام عمل قليلة (1-2)"].push(item);
-                if (item["أيام العمل"] > 2 && item["ساعات بالثواني"] < (item["أيام العمل"] * 6 * 3600)) rawData["أداء ضعيف (ساعات قليلة)"].push(item);
             });
 
             updateKPIs();
@@ -460,10 +448,7 @@
                     const detail = item["تفاصيل الأيام"] ? item["تفاصيل الأيام"][dayVal] : null;
                     if (detail) {
                         if (detail.status === 'شغال') {
-                            const mins = Math.round(detail.hours / 60);
-                            const h = Math.floor(mins / 60);
-                            const m = mins % 60;
-                            dayStatusText = `شغال (${h}:${m < 10 ? '0' : ''}${m})`;
+                            dayStatusText = `شغال (${cleanTimeFormat(detail.rawValue)})`;
                             dayStatusClass = 'text-emerald-400 font-bold';
                         } else if (detail.status === 'غياب') {
                             dayStatusText = 'غايب';
