@@ -13,7 +13,7 @@
     </style>
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen">
-
+ 
     <header class="bg-slate-800 border-b border-slate-700 p-4 sticky top-0 z-50">
         <div class="container mx-auto flex justify-between items-center">
             <div class="flex items-center gap-3">
@@ -25,14 +25,14 @@
             </div>
         </div>
     </header>
-
+ 
     <div class="container mx-auto p-4 md:p-6 space-y-6">
-
+ 
         <div id="error-banner" class="hidden bg-red-900/50 border border-red-500 text-red-200 p-4 rounded-xl text-sm">
             <i class="fa-solid fa-triangle-exclamation text-red-400 me-2"></i>
             <span id="error-msg">حدث خطأ أثناء تحميل البيانات.</span>
         </div>
-
+ 
         <!-- كروت KPI الأداء -->
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
             <div class="bg-slate-800 p-4 rounded-xl border border-slate-700">
@@ -56,7 +56,7 @@
                 <h3 id="kpi-5" class="text-2xl font-extrabold text-purple-400 mt-1">0</h3>
             </div>
         </div>
-
+ 
         <!-- الرسم البياني -->
         <div class="bg-slate-800 p-5 rounded-xl border border-slate-700">
             <h2 class="text-lg font-bold mb-4 text-slate-200"><i class="fa-solid fa-chart-pie me-2 text-amber-500"></i> توزيع الأداء والحالات</h2>
@@ -64,11 +64,11 @@
                 <canvas id="performanceChart"></canvas>
             </div>
         </div>
-
+ 
         <!-- الجدول الرئيسي -->
         <div class="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
             <div class="flex overflow-x-auto border-b border-slate-700 bg-slate-800/50 p-2 gap-2" id="category-tabs-container"></div>
-
+ 
             <div class="p-4 bg-slate-800/80 border-b border-slate-700 flex flex-wrap gap-4 items-center justify-between">
                 <div class="relative flex-1 min-w-[240px]">
                     <i class="fa-solid fa-magnifying-glass absolute right-3 top-3 text-slate-400"></i>
@@ -79,7 +79,7 @@
                     عدد السجلات: <span id="record-count" class="font-bold text-amber-400">0</span>
                 </div>
             </div>
-
+ 
             <div class="overflow-x-auto">
                 <table class="w-full text-sm text-right text-slate-300">
                     <thead class="text-xs uppercase bg-slate-900/80 text-slate-400 border-b border-slate-700">
@@ -104,15 +104,15 @@
                 </table>
             </div>
         </div>
-
+ 
     </div>
-
+ 
     <script>
         const API_URL = 'https://script.google.com/macros/s/AKfycbxlx4qkVkjvLe-axw8OboOZaagKbDr0j5uMjTO7wsxXjdWZL7AVU4aA7YRVPwfd_pxi/exec';
-
+ 
         let currentTabCategory = "كل البيانات";
         let chartInstance = null;
-
+ 
         let rawData = {
             "كل البيانات": [],
             "مش شغال خالص": [],
@@ -121,24 +121,24 @@
             "أيام عمل قليلة (1-2)": [],
             "أداء ضعيف (ساعات قليلة)": []
         };
-
+ 
         function hideError() { document.getElementById('error-banner').classList.add('hidden'); }
         function showError(msg) {
             document.getElementById('error-msg').innerText = msg;
             document.getElementById('error-banner').classList.remove('hidden');
         }
-
+ 
         async function loadSheetData() {
             hideError();
             document.getElementById('last-updated').innerHTML = `<i class="fa-solid fa-spinner fa-spin me-1"></i> جاري تحديث البيانات...`;
-
+ 
             try {
                 const response = await fetch(API_URL, { redirect: 'follow' });
                 if (!response.ok) throw new Error('فشل جلب البيانات');
                 
                 const rows = await response.json();
                 
-                if (Array.isArray(rows) && rows.length > 1) {
+                if (Array.isArray(rows) && rows.length > 2) {
                     parsePerformanceSheetData(rows);
                     document.getElementById('last-updated').innerHTML = `<i class="fa-regular fa-clock me-1"></i> آخر تحديث: ${new Date().toLocaleTimeString('ar-EG')}`;
                 } else {
@@ -150,26 +150,46 @@
                 document.getElementById('last-updated').innerHTML = `<i class="fa-solid fa-circle-exclamation text-red-400 me-1"></i> خطأ التحميل`;
             }
         }
-
+ 
         function parsePerformanceSheetData(rows) {
-            if (!rows || rows.length < 2) return;
-
+            // الصف رقم 1 (rows[0]) = عناوين الأعمدة
+            // الصف رقم 2 (rows[1]) = أرقام أيام الشهر الفعلية لكل عمود من عمود 5 لحد عمود 35
+            //                       (لو الخانة فاضية معناها إن اليوم ده مش موجود في الشهر الحالي)
+            // بيانات المناديب تبدأ فعليًا من الصف رقم 3 (rows[2])
+            if (!rows || rows.length < 3) return;
+ 
             const headers = rows[0].map(h => String(h || '').trim());
-
+            const dayRow = rows[1];
+ 
             let riderIdIdx = headers.findIndex(c => c.toLowerCase().includes('rider id') || c.includes('كود'));
             let riderNameIdx = headers.findIndex(c => c.toLowerCase().includes('rider name') || c.includes('اسم المندوب') || c.includes('الاسم'));
             let zoneIdx = headers.findIndex(c => c.toLowerCase().includes('zone') || c.includes('منطقة'));
             let supervisorIdx = headers.findIndex(c => c.includes('المشرف') || c.toLowerCase().includes('supervisor'));
             let totalHoursIdx = headers.findIndex(c => c.includes('إجمالي الساعات') || c.includes('اجمالي الساعات') || c.toLowerCase().includes('total hours'));
-
+ 
             if (riderIdIdx === -1) riderIdIdx = 0;
             if (riderNameIdx === -1) riderNameIdx = 1;
             if (zoneIdx === -1) zoneIdx = 2;
             if (supervisorIdx === -1) supervisorIdx = 3;
-
+ 
+            // أعمدة الأيام: تبدأ من عمود 5 (index 4) وتنتهي عند عمود 35 (index 34) كحد أقصى = 31 يوم
+            const DAY_COL_START = 4;
+            const DAY_COL_END = 34;
+ 
+            // نحدد الأعمدة الصالحة فعليًا بالاعتماد على الصف رقم 2: أي عمود فاضي في صف الأيام
+            // معناه إن اليوم ده مش موجود في الشهر الحالي، فمينفعش يتحسب كيوم عمل أو غياب
+            let validDayCols = [];
+            for (let i = DAY_COL_START; i <= DAY_COL_END; i++) {
+                if (i === totalHoursIdx) continue;
+                const dayVal = (dayRow && dayRow[i] !== undefined) ? String(dayRow[i]).trim() : '';
+                if (dayVal !== '' && dayVal.toLowerCase() !== 'nan') {
+                    validDayCols.push(i);
+                }
+            }
+ 
             function convertToSeconds(cellVal) {
                 if (cellVal === null || cellVal === undefined) return 0;
-
+ 
                 if (typeof cellVal === 'string' && cellVal.includes('T') && cellVal.includes('Z')) {
                     const timePart = cellVal.split('T')[1]?.split('.')[0];
                     if (timePart) {
@@ -177,10 +197,10 @@
                         return ((h || 0) * 3600) + ((m || 0) * 60) + (s || 0);
                     }
                 }
-
+ 
                 const valStr = String(cellVal).trim();
                 if (!valStr || valStr === 'NaN' || valStr === '-' || valStr === '0') return 0;
-
+ 
                 if (valStr.includes(':')) {
                     const parts = valStr.split(':').map(p => parseFloat(p) || 0);
                     if (parts.length === 3) {
@@ -189,7 +209,7 @@
                         return (parts[0] * 3600) + (parts[1] * 60);
                     }
                 }
-
+ 
                 const num = parseFloat(valStr);
                 if (!isNaN(num) && num > 0) {
                     if (num < 1) {
@@ -197,32 +217,32 @@
                     }
                     return Math.round(num * 3600);
                 }
-
+ 
                 return 0;
             }
-
+ 
             let parsedData = [];
-
-            for (let r = 1; r < rows.length; r++) {
+ 
+            // بيانات المناديب تبدأ من الصف رقم 3 (index 2) عشان نتخطى صف العناوين وصف أرقام الأيام
+            for (let r = 2; r < rows.length; r++) {
                 const row = rows[r];
                 if (!Array.isArray(row)) continue;
-
+ 
                 const riderId = row[riderIdIdx] !== undefined ? String(row[riderIdIdx]).trim() : '';
                 const riderName = row[riderNameIdx] !== undefined ? String(row[riderNameIdx]).trim() : '';
                 const zone = row[zoneIdx] !== undefined ? String(row[zoneIdx]).trim() : '';
                 const supervisor = row[supervisorIdx] !== undefined ? String(row[supervisorIdx]).trim() : '';
-
+ 
                 if ((!riderId && !riderName) || riderId.toLowerCase() === 'rider id' || riderName.toLowerCase() === 'rider name') continue;
-
+ 
                 let workDays = 0, notWorkingDays = 0, absDays = 0, susDays = 0, notSelectedDays = 0, totalHoursSec = 0;
-
-                for (let i = 4; i < row.length; i++) {
-                    if (i === totalHoursIdx) continue;
+ 
+                validDayCols.forEach(i => {
                     const cellVal = row[i];
-                    if (cellVal === null || cellVal === undefined) continue;
+                    if (cellVal === null || cellVal === undefined) return;
                     const val = String(cellVal).trim();
-                    if (!val || val === 'NaN') continue;
-
+                    if (!val || val === 'NaN') return;
+ 
                     if (val.includes('غياب')) { 
                         absDays++; 
                         notWorkingDays++; 
@@ -242,17 +262,17 @@
                             totalHoursSec += sec;
                         }
                     }
-                }
-
+                });
+ 
                 if (totalHoursIdx !== -1 && row[totalHoursIdx] !== undefined) {
                     const sheetTotalSec = convertToSeconds(row[totalHoursIdx]);
                     if (sheetTotalSec > 0) totalHoursSec = sheetTotalSec;
                 }
-
+ 
                 const totalMinsTotal = Math.round(totalHoursSec / 60);
                 const hours = Math.floor(totalMinsTotal / 60);
                 const mins = totalMinsTotal % 60;
-
+ 
                 parsedData.push({
                     "كود المندوب": riderId,
                     "الاسم": riderName,
@@ -267,13 +287,13 @@
                     "مش مختار": notSelectedDays
                 });
             }
-
+ 
             processPerformanceSheetData(parsedData);
         }
-
+ 
         function processPerformanceSheetData(items) {
             Object.keys(rawData).forEach(key => rawData[key] = []);
-
+ 
             items.forEach(item => {
                 rawData["كل البيانات"].push(item);
                 if (item["أيام العمل"] === 0) rawData["مش شغال خالص"].push(item);
@@ -282,13 +302,13 @@
                 if (item["أيام العمل"] === 1 || item["أيام العمل"] === 2) rawData["أيام عمل قليلة (1-2)"].push(item);
                 if (item["أيام العمل"] > 2 && item["ساعات بالثواني"] < (item["أيام العمل"] * 6 * 3600)) rawData["أداء ضعيف (ساعات قليلة)"].push(item);
             });
-
+ 
             updateKPIs();
             renderChart();
             renderCategoryTabs();
             renderPerformanceTable();
         }
-
+ 
         function updateKPIs() {
             document.getElementById('kpi-1').innerText = rawData["مش شغال خالص"].length;
             document.getElementById('kpi-2').innerText = rawData["موقوف"].length;
@@ -296,12 +316,12 @@
             document.getElementById('kpi-4').innerText = rawData["أيام عمل قليلة (1-2)"].length;
             document.getElementById('kpi-5').innerText = rawData["أداء ضعيف (ساعات قليلة)"].length;
         }
-
+ 
         function renderChart() {
             const ctx = document.getElementById('performanceChart').getContext('2d');
             if (chartInstance) chartInstance.destroy();
             const categories = ["مش شغال خالص", "موقوف", "غياب متكرر", "أيام عمل قليلة (1-2)", "أداء ضعيف (ساعات قليلة)"];
-
+ 
             chartInstance = new Chart(ctx, {
                 type: 'bar',
                 data: {
@@ -324,7 +344,7 @@
                 }
             });
         }
-
+ 
         function renderCategoryTabs() {
             const container = document.getElementById('category-tabs-container');
             container.innerHTML = '';
@@ -341,11 +361,11 @@
                 container.appendChild(btn);
             });
         }
-
+ 
         function renderPerformanceTable() {
             const tbody = document.getElementById('table-body');
             const searchVal = document.getElementById('search-input').value.toLowerCase();
-
+ 
             const list = rawData[currentTabCategory] || [];
             const filteredData = list.filter(item => 
                 String(item["كود المندوب"]).toLowerCase().includes(searchVal) ||
@@ -353,15 +373,15 @@
                 String(item["المنطقة"]).toLowerCase().includes(searchVal) ||
                 String(item["المشرف"]).toLowerCase().includes(searchVal)
             );
-
+ 
             document.getElementById('record-count').innerText = filteredData.length;
             tbody.innerHTML = '';
-
+ 
             if (filteredData.length === 0) {
                 tbody.innerHTML = `<tr><td colspan="10" class="text-center py-6 text-slate-500">لا توجد بيانات مطابقة.</td></tr>`;
                 return;
             }
-
+ 
             filteredData.forEach(item => {
                 const tr = document.createElement('tr');
                 tr.className = 'hover:bg-slate-700/30 transition border-b border-slate-700/40';
@@ -380,9 +400,9 @@
                 tbody.appendChild(tr);
             });
         }
-
+ 
         document.getElementById('search-input').addEventListener('input', renderPerformanceTable);
-
+ 
         loadSheetData();
     </script>
 </body>
