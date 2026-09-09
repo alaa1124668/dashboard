@@ -230,34 +230,42 @@
                 let rawDayVal = (dayRow && dayRow[i] !== undefined) ? String(dayRow[i]).trim() : '';
 
                 if (rawDayVal !== '' && rawDayVal.toLowerCase() !== 'nan') {
-                    let formattedDay = '';
+                    let dayNum = null;
 
-                    // استخراج الأرقام فقط من التاريخ لتفادي التداخل بين اليوم والشهر
-                    const parts = rawDayVal.match(/\d+/g);
-
-                    if (parts && parts.length >= 2) {
-                        let num1 = parseInt(parts[0], 10);
-                        let num2 = parseInt(parts[1], 10);
-
-                        // استبعاد 31/08 حصرياً بغض النظر عن الترتيب
-                        if ((num1 === 31 && num2 === 8) || (num1 === 8 && num2 === 31)) {
-                            continue;
+                    // 1. التعامل مع تواريخ ISO الناتجة من جوجل شيت (مثل 2026-09-08T00:00:00.000Z)
+                    if (rawDayVal.includes('T') || rawDayVal.includes('Z')) {
+                        const d = new Date(rawDayVal);
+                        if (!isNaN(d.getTime())) {
+                            dayNum = d.getUTCDate();
                         }
-
-                        // تحديد رقم اليوم الصحيح
-                        let dayNum = num1;
-                        if (num1 === 9) dayNum = num2;
-                        else if (num2 === 9) dayNum = num1;
-
-                        formattedDay = `${String(dayNum).padStart(2, '0')}/09`;
-                    } else if (parts && parts.length === 1) {
-                        formattedDay = `${String(parts[0]).padStart(2, '0')}/09`;
-                    } else {
-                        formattedDay = rawDayVal;
                     }
 
-                    validDayCols.push(i);
-                    dayColLabelMap.set(i, formattedDay);
+                    // 2. معالجة التواريخ العادية
+                    if (!dayNum) {
+                        const parts = rawDayVal.match(/\d+/g);
+                        if (parts) {
+                            const nums = parts.map(n => parseInt(n, 10));
+                            
+                            // استبعاد شهر أغسطس
+                            if (nums.includes(31) && nums.includes(8)) continue;
+
+                            // فلترة استخراج رقم اليوم
+                            const potentialDays = nums.filter(n => n > 0 && n <= 31 && n !== 2026);
+                            if (potentialDays.length > 0) {
+                                if (potentialDays.length >= 2 && potentialDays.includes(9)) {
+                                    dayNum = potentialDays.find(n => n !== 9) || 9;
+                                } else {
+                                    dayNum = potentialDays[0];
+                                }
+                            }
+                        }
+                    }
+
+                    if (dayNum) {
+                        const formattedDay = `${String(dayNum).padStart(2, '0')}/09`;
+                        validDayCols.push(i);
+                        dayColLabelMap.set(i, formattedDay);
+                    }
                 }
             }
 
