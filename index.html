@@ -103,7 +103,7 @@
                             <th class="px-4 py-3">اسم المشرف</th>
                             <th class="px-4 py-3 text-center">أيام العمل</th>
                             <th class="px-4 py-3 text-center">أيام عدم العمل</th>
-                            <th class="px-4 py-3 text-center">إجمالي الساعات (محسوب)</th>
+                            <th class="px-4 py-3 text-center">إجمالي الساعات (AM)</th>
                             <th class="px-4 py-3 text-center">الغياب</th>
                             <th class="px-4 py-3 text-center">الإيقاف</th>
                             <th class="px-4 py-3 text-center text-slate-400">مش مختار</th>
@@ -166,18 +166,16 @@
             script.id = 'jsonp-script';
             script.src = `${API_URL}?prefix=${callbackName}`;
             script.onerror = function() {
-                showError('تعذر جلب البيانات. تأكد من إمكانية الوصول إلى رابط API.');
+                showError('تعذر جلب البيانات.');
                 document.getElementById('last-updated').innerHTML = `<i class="fa-solid fa-circle-exclamation text-red-400 me-1"></i> خطأ التحميل`;
             };
             document.body.appendChild(script);
         }
 
-        // تحويل أي صيغة وقت (HH:MM:SS) أو ISO Date إلى ثوانٍ مباشرة
         function parseTimeToSeconds(valStr) {
             if (!valStr || valStr === 'NaN' || valStr === '-' || valStr === '0') return 0;
             const str = String(valStr).trim();
 
-            // حالة ISO Date مثل 1899-12-30T05:32:59.000Z
             if (str.includes('T')) {
                 const parts = str.split('T')[1];
                 if (parts) {
@@ -188,18 +186,16 @@
                 }
             }
 
-            // حالة الوقت المباشر 05:32:59 أو 05:32
             if (str.includes(':')) {
                 const parts = str.split(':').map(p => parseFloat(p) || 0);
                 if (parts.length === 3) return (parts[0] * 3600) + (parts[1] * 60) + parts[2];
                 if (parts.length === 2) return (parts[0] * 3600) + (parts[1] * 60);
             }
 
-            // حالة الأرقام العشرية (Excel/Google Sheets Fraction of a day)
             const num = parseFloat(str);
             if (!isNaN(num) && num > 0) {
-                if (num < 1) return Math.round(num * 86400); // نسبة من اليوم
-                if (num <= 24) return Math.round(num * 3600); // عدد ساعات مباشر
+                if (num < 1) return Math.round(num * 86400);
+                if (num <= 24) return Math.round(num * 3600);
             }
             return 0;
         }
@@ -207,26 +203,18 @@
         function parsePerformanceSheetData(rows) {
             if (!rows || rows.length < 3) return;
 
-            const headers = rows[0].map(h => String(h || '').trim());
+            // الصف رقم 2 في الشيت هو الصف ذو الفهرس 1 في المصفوفة (rows[1])
             const dayRow = rows[1];
 
-            let riderIdIdx = headers.findIndex(c => c.toLowerCase().includes('rider id') || c.includes('كود'));
-            let riderNameIdx = headers.findIndex(c => c.toLowerCase().includes('rider name') || c.includes('اسم المندوب') || c.includes('الاسم'));
-            let zoneIdx = headers.findIndex(c => c.toLowerCase().includes('zone') || c.includes('منطقة'));
-            let supervisorIdx = headers.findIndex(c => c.includes('المشرف') || c.toLowerCase().includes('supervisor'));
-
-            if (riderIdIdx === -1) riderIdIdx = 0;
-            if (riderNameIdx === -1) riderNameIdx = 1;
-            if (zoneIdx === -1) zoneIdx = 2;
-            if (supervisorIdx === -1) supervisorIdx = 3;
-
-            // تحديد أعمدة الأيام (من E حتى AI أي من العمود index 4 إلى 34)
-            const DAY_COL_START = 4;
-            const DAY_COL_END = 34;
+            // تحويل اسم العمود إلى فهرس (A=0 ... E=4, AI=34, AM=38)
+            const DAY_COL_START = 4;  // Column E
+            const DAY_COL_END = 34;   // Column AI
+            const AM_COL_INDEX = 38;  // Column AM
 
             let validDayCols = [];
             const dayColLabelMap = new Map();
 
+            // استخراج التواريخ حصراً من الصف رقم 2 (الأعمدة E إلى AI)
             for (let i = DAY_COL_START; i <= DAY_COL_END; i++) {
                 let rawDayVal = (dayRow && dayRow[i] !== undefined) ? String(dayRow[i]).trim() : '';
 
@@ -235,15 +223,16 @@
                     let monthNum = 9;
                     let yearNum = 2026;
 
+                    // معالجة سلسلة التاريخ نصياً لمنع أي ترحيل بسبب Time Zone
                     const cleanStr = rawDayVal.split('T')[0];
                     const parts = cleanStr.match(/\d+/g);
 
                     if (parts && parts.length >= 3) {
-                        if (parts[0].length === 4) {
+                        if (parts[0].length === 4) { // YYYY-MM-DD
                             yearNum = parseInt(parts[0], 10);
                             monthNum = parseInt(parts[1], 10);
                             dayNum = parseInt(parts[2], 10);
-                        } else {
+                        } else { // M/D/YYYY
                             monthNum = parseInt(parts[0], 10);
                             dayNum = parseInt(parts[1], 10);
                             yearNum = parseInt(parts[2], 10);
@@ -254,9 +243,6 @@
                     } else if (parts && parts.length === 1) {
                         dayNum = parseInt(parts[0], 10);
                     }
-
-                    // تصفية وتجاهل شهر أغسطس
-                    if (monthNum === 8 || (dayNum === 31 && monthNum !== 9)) continue;
 
                     if (dayNum && dayNum >= 1 && dayNum <= 31) {
                         const formattedDay = `${String(dayNum).padStart(2, '0')}/${String(monthNum).padStart(2, '0')}/${yearNum}`;
@@ -274,15 +260,15 @@
                 const row = rows[r];
                 if (!Array.isArray(row)) continue;
 
-                const riderId = row[riderIdIdx] !== undefined ? String(row[riderIdIdx]).trim() : '';
-                const riderName = row[riderNameIdx] !== undefined ? String(row[riderNameIdx]).trim() : '';
-                const zone = row[zoneIdx] !== undefined ? String(row[zoneIdx]).trim() : '';
-                const supervisor = row[supervisorIdx] !== undefined ? String(row[supervisorIdx]).trim() : '';
+                const riderId = row[0] !== undefined ? String(row[0]).trim() : '';
+                const riderName = row[1] !== undefined ? String(row[1]).trim() : '';
+                const zone = row[2] !== undefined ? String(row[2]).trim() : '';
+                const supervisor = row[3] !== undefined ? String(row[3]).trim() : '';
 
                 if ((!riderId && !riderName) || riderId.toLowerCase() === 'rider id') continue;
 
                 let workDays = 0, notWorkingDays = 0, absDays = 0, susDays = 0, notSelectedDays = 0;
-                let calculatedTotalSeconds = 0; // الجمع المباشر والدقيق للساعات
+                let calculatedTotalSec = 0;
                 const dayDetails = {};
 
                 validDayCols.forEach(i => {
@@ -306,11 +292,10 @@
                             notWorkingDays++;
                             statusForDay = 'مش مختار';
                         } else {
-                            // تحويل وقت العمل لثواني وجمعه على الإجمالي
                             const sec = parseTimeToSeconds(val);
                             if (sec > 0) {
                                 workDays++;
-                                calculatedTotalSeconds += sec; // الجمع التراكمي المباشر
+                                calculatedTotalSec += sec;
                                 statusForDay = 'شغال';
                                 hoursForDay = sec;
                             }
@@ -320,11 +305,17 @@
                     dayDetails[label] = { status: statusForDay, hours: hoursForDay };
                 });
 
-                // تحويل إجمالي الثواني المجمعة إلى صيغة ساعات ودقائق واضحة
-                const totalMins = Math.floor(calculatedTotalSeconds / 60);
-                const displayHours = Math.floor(totalMins / 60);
-                const displayMins = totalMins % 60;
-                const formattedTotalHours = `${displayHours}:${displayMins < 10 ? '0' : ''}${displayMins}`;
+                // قراءة القيمة الجاهزة المكتوبة مباشرة من العامود AM
+                let rawAMVal = row[AM_COL_INDEX] !== undefined ? String(row[AM_COL_INDEX]).trim() : '';
+                let displayTotalHours = rawAMVal;
+
+                // إذا كان العامود AM فارغاً، يتم استخدام الحساب التلقائي كبديل احتياطي
+                if (!displayTotalHours || displayTotalHours === 'NaN' || displayTotalHours === '-') {
+                    const totalMins = Math.floor(calculatedTotalSec / 60);
+                    const h = Math.floor(totalMins / 60);
+                    const m = totalMins % 60;
+                    displayTotalHours = `${h}:${m < 10 ? '0' : ''}${m}`;
+                }
 
                 parsedData.push({
                     "كود المندوب": riderId,
@@ -333,8 +324,8 @@
                     "المشرف": supervisor,
                     "أيام العمل": workDays,
                     "أيام عدم العمل": notWorkingDays,
-                    "إجمالي الساعات": formattedTotalHours,
-                    "ساعات بالثواني": calculatedTotalSeconds,
+                    "إجمالي الساعات": displayTotalHours,
+                    "ساعات بالثواني": calculatedTotalSec,
                     "الغياب": absDays,
                     "الإيقاف": susDays,
                     "مش مختار": notSelectedDays,
