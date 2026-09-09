@@ -166,11 +166,31 @@
             }
         }
 
+        function formatDayLabel(val) {
+            if (!val) return '';
+            const str = String(val).trim();
+            
+            // معالجة صيغ ISO Dates المتأتية من Apps Script
+            if (str.includes('T') && str.includes('Z')) {
+                const d = new Date(str);
+                if (!isNaN(d.getTime())) {
+                    return String(d.getUTCDate()); 
+                }
+            }
+            
+            // معالجة التواريخ ذات الفواصل YYYY-MM-DD
+            if (str.includes('-') || str.includes('/')) {
+                const parts = str.split(/[T\s]/)[0].split(/[-/]/);
+                if (parts.length === 3) {
+                    const dayNum = parts[0].length === 4 ? parts[2] : parts[0];
+                    return parseInt(dayNum, 10).toString();
+                }
+            }
+
+            return str;
+        }
+
         function parsePerformanceSheetData(rows) {
-            // الصف رقم 1 (rows[0]) = عناوين الأعمدة
-            // الصف رقم 2 (rows[1]) = أرقام أيام الشهر الفعلية لكل عمود من عمود 5 لحد عمود 35
-            //                       (لو الخانة فاضية معناها إن اليوم ده مش موجود في الشهر الحالي)
-            // بيانات المناديب تبدأ فعليًا من الصف رقم 3 (rows[2])
             if (!rows || rows.length < 3) return;
 
             const headers = rows[0].map(h => String(h || '').trim());
@@ -187,24 +207,21 @@
             if (zoneIdx === -1) zoneIdx = 2;
             if (supervisorIdx === -1) supervisorIdx = 3;
 
-            // أعمدة الأيام: تبدأ من عمود 5 (index 4) وتنتهي عند عمود 35 (index 34) كحد أقصى = 31 يوم
             const DAY_COL_START = 4;
             const DAY_COL_END = 34;
 
-            // نحدد الأعمدة الصالحة فعليًا بالاعتماد على الصف رقم 2: أي عمود فاضي في صف الأيام
-            // معناه إن اليوم ده مش موجود في الشهر الحالي، فمينفعش يتحسب كيوم عمل أو غياب
             let validDayCols = [];
             const dayColLabelMap = new Map();
             for (let i = DAY_COL_START; i <= DAY_COL_END; i++) {
                 if (i === totalHoursIdx) continue;
-                const dayVal = (dayRow && dayRow[i] !== undefined) ? String(dayRow[i]).trim() : '';
-                if (dayVal !== '' && dayVal.toLowerCase() !== 'nan') {
+                const rawDayVal = (dayRow && dayRow[i] !== undefined) ? String(dayRow[i]).trim() : '';
+                if (rawDayVal !== '' && rawDayVal.toLowerCase() !== 'nan') {
+                    const cleanDayLabel = formatDayLabel(rawDayVal);
                     validDayCols.push(i);
-                    dayColLabelMap.set(i, dayVal);
+                    dayColLabelMap.set(i, cleanDayLabel);
                 }
             }
 
-            // قايمة أرقام الأيام الصالحة، تُستخدم لملء قايمة اختيار "اليوم" في الواجهة
             dayLabelsList = validDayCols.map(i => dayColLabelMap.get(i));
 
             function convertToSeconds(cellVal) {
@@ -243,7 +260,6 @@
 
             let parsedData = [];
 
-            // بيانات المناديب تبدأ من الصف رقم 3 (index 2) عشان نتخطى صف العناوين وصف أرقام الأيام
             for (let r = 2; r < rows.length; r++) {
                 const row = rows[r];
                 if (!Array.isArray(row)) continue;
@@ -256,7 +272,7 @@
                 if ((!riderId && !riderName) || riderId.toLowerCase() === 'rider id' || riderName.toLowerCase() === 'rider name') continue;
 
                 let workDays = 0, notWorkingDays = 0, absDays = 0, susDays = 0, notSelectedDays = 0, totalHoursSec = 0;
-                const dayDetails = {}; // تفاصيل حالة المندوب يوم بيوم، مستخدمة في فلتر "اليوم"
+                const dayDetails = {};
 
                 validDayCols.forEach(i => {
                     const label = dayColLabelMap.get(i);
@@ -296,8 +312,6 @@
                     dayDetails[label] = { status: statusForDay, hours: hoursForDay };
                 });
 
-                // إجمالي الساعات بيتحسب دلوقتي بجمع ساعات كل الأيام اللي المندوب شغل فيها فعلاً
-                // (مفيش استبدال بقيمة عمود "إجمالي الساعات" من الشيت عشان القيمة دي كانت بتبوظ المجموع الحقيقي)
                 const totalMinsTotal = Math.round(totalHoursSec / 60);
                 const hours = Math.floor(totalMinsTotal / 60);
                 const mins = totalMinsTotal % 60;
@@ -361,7 +375,6 @@
             daySelect.innerHTML = '<option value="">كل الشهر (بدون تحديد يوم)</option>' +
                 dayLabelsList.map(d => `<option value="${d}">يوم ${d}</option>`).join('');
 
-            // نحافظ على الاختيار اللي كان متحدد قبل التحديث لو لسه موجود
             if (zones.includes(currentZone)) zoneSelect.value = currentZone;
             if (supervisors.includes(currentSupervisor)) supervisorSelect.value = currentSupervisor;
             if (dayLabelsList.includes(currentDay)) daySelect.value = currentDay;
@@ -451,7 +464,6 @@
                 const tr = document.createElement('tr');
                 tr.className = 'hover:bg-slate-700/30 transition border-b border-slate-700/40';
 
-                // عمود "حالة اليوم المحدد": بيظهر حالة المندوب في اليوم المختار بس من القايمة
                 let dayStatusText = '-';
                 let dayStatusClass = 'text-slate-600';
                 if (dayVal) {
