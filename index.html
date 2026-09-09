@@ -103,7 +103,7 @@
                             <th class="px-4 py-3">اسم المشرف</th>
                             <th class="px-4 py-3 text-center">أيام العمل</th>
                             <th class="px-4 py-3 text-center">أيام عدم العمل</th>
-                            <th class="px-4 py-3 text-center">إجمالي الساعات</th>
+                            <th class="px-4 py-3 text-center">إجمالي الساعات (محسوب)</th>
                             <th class="px-4 py-3 text-center">الغياب</th>
                             <th class="px-4 py-3 text-center">الإيقاف</th>
                             <th class="px-4 py-3 text-center text-slate-400">مش مختار</th>
@@ -166,38 +166,40 @@
             script.id = 'jsonp-script';
             script.src = `${API_URL}?prefix=${callbackName}`;
             script.onerror = function() {
-                showError('تعذر جلب البيانات. تأكد من تسجيل الدخول بحساب Google إذا كنت تستخدم رابط /dev.');
+                showError('تعذر جلب البيانات. تأكد من إمكانية الوصول إلى رابط API.');
                 document.getElementById('last-updated').innerHTML = `<i class="fa-solid fa-circle-exclamation text-red-400 me-1"></i> خطأ التحميل`;
             };
             document.body.appendChild(script);
         }
 
-        function convertToSeconds(valStr) {
+        // تحويل أي صيغة وقت (HH:MM:SS) أو ISO Date إلى ثوانٍ مباشرة
+        function parseTimeToSeconds(valStr) {
             if (!valStr || valStr === 'NaN' || valStr === '-' || valStr === '0') return 0;
             const str = String(valStr).trim();
 
-            if (str.includes('T') && str.includes('Z')) {
-                const dateObj = new Date(str);
-                if (!isNaN(dateObj.getTime())) {
-                    const hours = dateObj.getUTCHours();
-                    const minutes = dateObj.getUTCMinutes();
-                    const seconds = dateObj.getUTCSeconds();
-                    const totalSec = (hours * 3600) + (minutes * 60) + seconds;
-                    if (totalSec > 0) return totalSec;
+            // حالة ISO Date مثل 1899-12-30T05:32:59.000Z
+            if (str.includes('T')) {
+                const parts = str.split('T')[1];
+                if (parts) {
+                    const timeComponents = parts.split('.')[0].split(':').map(p => parseFloat(p) || 0);
+                    if (timeComponents.length >= 2) {
+                        return (timeComponents[0] * 3600) + (timeComponents[1] * 60) + (timeComponents[2] || 0);
+                    }
                 }
-                return 0;
             }
 
+            // حالة الوقت المباشر 05:32:59 أو 05:32
             if (str.includes(':')) {
                 const parts = str.split(':').map(p => parseFloat(p) || 0);
                 if (parts.length === 3) return (parts[0] * 3600) + (parts[1] * 60) + parts[2];
                 if (parts.length === 2) return (parts[0] * 3600) + (parts[1] * 60);
             }
 
+            // حالة الأرقام العشرية (Excel/Google Sheets Fraction of a day)
             const num = parseFloat(str);
             if (!isNaN(num) && num > 0) {
-                if (num < 1) return Math.round(num * 86400);
-                if (num <= 24) return Math.round(num * 3600);
+                if (num < 1) return Math.round(num * 86400); // نسبة من اليوم
+                if (num <= 24) return Math.round(num * 3600); // عدد ساعات مباشر
             }
             return 0;
         }
@@ -212,13 +214,13 @@
             let riderNameIdx = headers.findIndex(c => c.toLowerCase().includes('rider name') || c.includes('اسم المندوب') || c.includes('الاسم'));
             let zoneIdx = headers.findIndex(c => c.toLowerCase().includes('zone') || c.includes('منطقة'));
             let supervisorIdx = headers.findIndex(c => c.includes('المشرف') || c.toLowerCase().includes('supervisor'));
-            let totalHoursIdx = headers.findIndex(c => c.includes('إجمالي الساعات') || c.includes('اجمالي الساعات') || c.toLowerCase().includes('total hours'));
 
             if (riderIdIdx === -1) riderIdIdx = 0;
             if (riderNameIdx === -1) riderNameIdx = 1;
             if (zoneIdx === -1) zoneIdx = 2;
             if (supervisorIdx === -1) supervisorIdx = 3;
 
+            // تحديد أعمدة الأيام (من E حتى AI أي من العمود index 4 إلى 34)
             const DAY_COL_START = 4;
             const DAY_COL_END = 34;
 
@@ -226,7 +228,6 @@
             const dayColLabelMap = new Map();
 
             for (let i = DAY_COL_START; i <= DAY_COL_END; i++) {
-                if (i === totalHoursIdx) continue;
                 let rawDayVal = (dayRow && dayRow[i] !== undefined) ? String(dayRow[i]).trim() : '';
 
                 if (rawDayVal !== '' && rawDayVal.toLowerCase() !== 'nan') {
@@ -234,17 +235,15 @@
                     let monthNum = 9;
                     let yearNum = 2026;
 
-                    // تحليل النص مباشرة دون تحويل لـ Date لتفادي مشكلة Timezone Offset
-                    const cleanStr = rawDayVal.split('T')[0]; // أخذ جزء التاريخ فقط YYYY-MM-DD
+                    const cleanStr = rawDayVal.split('T')[0];
                     const parts = cleanStr.match(/\d+/g);
 
                     if (parts && parts.length >= 3) {
-                        // صيغة YYYY-MM-DD أو M/D/YYYY
-                        if (parts[0].length === 4) { // 2026-09-01
+                        if (parts[0].length === 4) {
                             yearNum = parseInt(parts[0], 10);
                             monthNum = parseInt(parts[1], 10);
                             dayNum = parseInt(parts[2], 10);
-                        } else { // 9/1/2026
+                        } else {
                             monthNum = parseInt(parts[0], 10);
                             dayNum = parseInt(parts[1], 10);
                             yearNum = parseInt(parts[2], 10);
@@ -256,7 +255,7 @@
                         dayNum = parseInt(parts[0], 10);
                     }
 
-                    // تجاهل أي تاريخ يقع في شهر أغسطس (08) لضمان نظافة القائمة
+                    // تصفية وتجاهل شهر أغسطس
                     if (monthNum === 8 || (dayNum === 31 && monthNum !== 9)) continue;
 
                     if (dayNum && dayNum >= 1 && dayNum <= 31) {
@@ -282,7 +281,8 @@
 
                 if ((!riderId && !riderName) || riderId.toLowerCase() === 'rider id') continue;
 
-                let workDays = 0, notWorkingDays = 0, absDays = 0, susDays = 0, notSelectedDays = 0, totalHoursSec = 0;
+                let workDays = 0, notWorkingDays = 0, absDays = 0, susDays = 0, notSelectedDays = 0;
+                let calculatedTotalSeconds = 0; // الجمع المباشر والدقيق للساعات
                 const dayDetails = {};
 
                 validDayCols.forEach(i => {
@@ -306,10 +306,11 @@
                             notWorkingDays++;
                             statusForDay = 'مش مختار';
                         } else {
-                            const sec = convertToSeconds(val);
+                            // تحويل وقت العمل لثواني وجمعه على الإجمالي
+                            const sec = parseTimeToSeconds(val);
                             if (sec > 0) {
                                 workDays++;
-                                totalHoursSec += sec;
+                                calculatedTotalSeconds += sec; // الجمع التراكمي المباشر
                                 statusForDay = 'شغال';
                                 hoursForDay = sec;
                             }
@@ -319,9 +320,11 @@
                     dayDetails[label] = { status: statusForDay, hours: hoursForDay };
                 });
 
-                const totalMinsTotal = Math.round(totalHoursSec / 60);
-                const hours = Math.floor(totalMinsTotal / 60);
-                const mins = totalMinsTotal % 60;
+                // تحويل إجمالي الثواني المجمعة إلى صيغة ساعات ودقائق واضحة
+                const totalMins = Math.floor(calculatedTotalSeconds / 60);
+                const displayHours = Math.floor(totalMins / 60);
+                const displayMins = totalMins % 60;
+                const formattedTotalHours = `${displayHours}:${displayMins < 10 ? '0' : ''}${displayMins}`;
 
                 parsedData.push({
                     "كود المندوب": riderId,
@@ -330,8 +333,8 @@
                     "المشرف": supervisor,
                     "أيام العمل": workDays,
                     "أيام عدم العمل": notWorkingDays,
-                    "إجمالي الساعات": `${hours}:${mins < 10 ? '0' : ''}${mins}`,
-                    "ساعات بالثواني": totalHoursSec,
+                    "إجمالي الساعات": formattedTotalHours,
+                    "ساعات بالثواني": calculatedTotalSeconds,
                     "الغياب": absDays,
                     "الإيقاف": susDays,
                     "مش مختار": notSelectedDays,
