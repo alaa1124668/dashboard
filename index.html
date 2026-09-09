@@ -170,15 +170,14 @@
             if (!val) return '';
             const str = String(val).trim();
             
-            // معالجة صيغ ISO Dates المتأتية من Apps Script
+            // قراءة اليوم بالتوقيت المحلي لمنع الترحيل بسبب UTC
             if (str.includes('T') && str.includes('Z')) {
                 const d = new Date(str);
                 if (!isNaN(d.getTime())) {
-                    return String(d.getUTCDate()); 
+                    return String(d.getDate()); 
                 }
             }
             
-            // معالجة التواريخ ذات الفواصل YYYY-MM-DD
             if (str.includes('-') || str.includes('/')) {
                 const parts = str.split(/[T\s]/)[0].split(/[-/]/);
                 if (parts.length === 3) {
@@ -222,7 +221,10 @@
                 }
             }
 
-            dayLabelsList = validDayCols.map(i => dayColLabelMap.get(i));
+            // ترتيب الأيام تصاعدياً حسب أرقامها
+            dayLabelsList = validDayCols
+                .map(i => dayColLabelMap.get(i))
+                .sort((a, b) => parseInt(a, 10) - parseInt(b, 10));
 
             function convertToSeconds(cellVal) {
                 if (cellVal === null || cellVal === undefined) return 0;
