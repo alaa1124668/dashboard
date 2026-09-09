@@ -122,7 +122,7 @@
     </div>
 
     <script>
-        const API_URL = 'https://script.google.com/macros/s/AKfycbxlx4qkVkjvLe-axw8OboOZaagKbDr0j5uMjTO7wsxXjdWZL7AVU4aA7YRVPwfd_pxi/exec';
+        const API_URL = 'https://script.google.com/macros/s/AKfycbxlx4qkVkVjvLe-axw8OboOZaagKbDr0j5uMjTO7wsxXjdWZL7AVU4aA7YRVPwfd_pxi/exec';
 
         let currentTabCategory = "كل البيانات";
         let chartInstance = null;
@@ -170,7 +170,6 @@
             if (!val) return '';
             const str = String(val).trim();
             
-            // قراءة اليوم بالتوقيت المحلي لمنع الترحيل بسبب UTC
             if (str.includes('T') && str.includes('Z')) {
                 const d = new Date(str);
                 if (!isNaN(d.getTime())) {
@@ -221,19 +220,18 @@
                 }
             }
 
-            // ترتيب الأيام تصاعدياً حسب أرقامها
             dayLabelsList = validDayCols
                 .map(i => dayColLabelMap.get(i))
                 .sort((a, b) => parseInt(a, 10) - parseInt(b, 10));
 
+            // معالجة دقيقة لتحويل أوقات الساعات إلى ثواني
             function convertToSeconds(cellVal) {
                 if (cellVal === null || cellVal === undefined) return 0;
 
-                if (typeof cellVal === 'string' && cellVal.includes('T') && cellVal.includes('Z')) {
-                    const timePart = cellVal.split('T')[1]?.split('.')[0];
-                    if (timePart) {
-                        const [h, m, s] = timePart.split(':').map(Number);
-                        return ((h || 0) * 3600) + ((m || 0) * 60) + (s || 0);
+                if (typeof cellVal === 'string' && cellVal.includes('T')) {
+                    const d = new Date(cellVal);
+                    if (!isNaN(d.getTime())) {
+                        return (d.getHours() * 3600) + (d.getMinutes() * 60) + d.getSeconds();
                     }
                 }
 
