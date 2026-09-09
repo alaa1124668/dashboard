@@ -231,11 +231,19 @@
 
                 if (rawDayVal !== '' && rawDayVal.toLowerCase() !== 'nan') {
                     if (rawDayVal.includes('T')) {
-                        const dateObj = new Date(rawDayVal);
-                        if (!isNaN(dateObj.getTime())) {
-                            const day = String(dateObj.getUTCDate()).padStart(2, '0');
-                            const month = String(dateObj.getUTCMonth() + 1).padStart(2, '0');
+                        const datePart = rawDayVal.split('T')[0];
+                        const parts = datePart.split('-');
+                        if (parts.length === 3) {
+                            const day = parts[2].padStart(2, '0');
+                            const month = parts[1].padStart(2, '0');
                             rawDayVal = `${day}/${month}`;
+                        } else {
+                            const dateObj = new Date(rawDayVal);
+                            if (!isNaN(dateObj.getTime())) {
+                                const day = String(dateObj.getDate()).padStart(2, '0');
+                                const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+                                rawDayVal = `${day}/${month}`;
+                            }
                         }
                     }
                     validDayCols.push(i);
