@@ -172,63 +172,50 @@
             document.body.appendChild(script);
         }
 
-        // دالة تنظيف وتنسيق الساعات النصية مباشرة بدون تحويلات تاريخ
-        function cleanTimeFormat(valStr) {
-            if (!valStr || valStr === 'NaN' || valStr === '-' || valStr === '0') return '00:00';
-            const str = String(valStr).trim();
-
+        // دالة عرض القيمة كما هي بداخل الشيت بدون إجراء أي عمليات تحويل تاريخ عليها
+        function getRawString(val) {
+            if (val === undefined || val === null || val === 'NaN') return '0';
+            let str = String(val).trim();
             if (str.includes('T')) {
-                const timePart = str.split('T')[1];
-                if (timePart) {
-                    const cleanParts = timePart.split('.')[0].split(':');
-                    if (cleanParts.length >= 2) {
-                        let hours = parseInt(cleanParts[0], 10) || 0;
-                        let mins = parseInt(cleanParts[1], 10) || 0;
-                        const datePart = str.split('T')[0];
-                        if (datePart.startsWith('1899-12-31')) hours += 24;
-                        else if (datePart.startsWith('1900-01-01')) hours += 48;
-                        else if (datePart.startsWith('1900-01-02')) hours += 72;
-
-                        return `${hours}:${mins < 10 ? '0' : ''}${mins}`;
-                    }
-                }
+                const parts = str.split('T')[1].split('.')[0].split(':');
+                if (parts.length >= 2) return `${parseInt(parts[0], 10)}:${parts[1]}`;
             }
-
-            if (str.includes(':')) {
-                const parts = str.split(':');
-                if (parts.length >= 2) {
-                    return `${parts[0]}:${parts[1]}`;
-                }
-            }
-
             return str;
         }
 
-        // دالة تنسيق التاريخ بمرونة وقراءته من رأس الشيت مباشرة
-        function formatHeaderDate(rawVal) {
-            if (!rawVal) return '';
-            let str = String(rawVal).trim();
-
-            if (str.includes('T')) {
-                str = str.split('T')[0];
-            }
-
+        // تحليلي للتاريخ من الصف الهيدر بطريقة مضمونة YYYY-MM-DD أو DD/MM/YYYY
+        function parseHeaderDateCorrectly(rawDayVal) {
+            if (!rawDayVal) return null;
+            let str = String(rawDayVal).trim().split('T')[0];
             const parts = str.match(/\d+/g);
-            if (parts && parts.length >= 3) {
-                let y, m, d;
-                if (parts[0].length === 4) {
-                    y = parts[0];
-                    m = parts[1].padStart(2, '0');
-                    d = parts[2].padStart(2, '0');
+
+            if (!parts || parts.length < 3) return str;
+
+            let year, month, day;
+
+            if (parts[0].length === 4) { // ISO Format: YYYY-MM-DD
+                year = parts[0];
+                month = parts[1].padStart(2, '0');
+                day = parts[2].padStart(2, '0');
+            } else { // Format: DD/MM/YYYY or MM/DD/YYYY
+                let p1 = parseInt(parts[0], 10);
+                let p2 = parseInt(parts[1], 10);
+                year = parts[2].length === 2 ? '20' + parts[2] : parts[2];
+
+                if (p1 > 12) {
+                    day = String(p1).padStart(2, '0');
+                    month = String(p2).padStart(2, '0');
+                } else if (p2 > 12) {
+                    day = String(p2).padStart(2, '0');
+                    month = String(p1).padStart(2, '0');
                 } else {
-                    m = parts[0].padStart(2, '0');
-                    d = parts[1].padStart(2, '0');
-                    y = parts[2].length === 2 ? '20' + parts[2] : parts[2];
+                    // الاعتماد على التنسيق السائد في الشيتات العربية (DD/MM/YYYY)
+                    day = String(p1).padStart(2, '0');
+                    month = String(p2).padStart(2, '0');
                 }
-                return `${d}/${m}/${y}`;
             }
 
-            return str;
+            return `${day}/${month}/${year}`;
         }
 
         function parsePerformanceSheetData(rows) {
@@ -247,7 +234,7 @@
                 let rawDayVal = (dayRow && dayRow[i] !== undefined) ? String(dayRow[i]).trim() : '';
 
                 if (rawDayVal !== '' && rawDayVal.toLowerCase() !== 'nan') {
-                    const formattedDay = formatHeaderDate(rawDayVal);
+                    const formattedDay = parseHeaderDateCorrectly(rawDayVal);
                     if (formattedDay) {
                         validDayCols.push(i);
                         dayColLabelMap.set(i, formattedDay);
@@ -301,8 +288,8 @@
                     dayDetails[label] = { status: statusForDay, rawValue: val };
                 });
 
-                let rawAMVal = row[AM_COL_INDEX] !== undefined ? String(row[AM_COL_INDEX]).trim() : '';
-                let displayTotalHours = cleanTimeFormat(rawAMVal);
+                let rawAMVal = row[AM_COL_INDEX] !== undefined ? row[AM_COL_INDEX] : '0';
+                let displayTotalHours = getRawString(rawAMVal);
 
                 parsedData.push({
                     "كود المندوب": riderId,
@@ -445,7 +432,7 @@
                     const detail = item["تفاصيل الأيام"] ? item["تفاصيل الأيام"][dayVal] : null;
                     if (detail) {
                         if (detail.status === 'شغال') {
-                            dayStatusText = `شغال (${cleanTimeFormat(detail.rawValue)})`;
+                            dayStatusText = `شغال (${getRawString(detail.rawValue)})`;
                             dayStatusClass = 'text-emerald-400 font-bold';
                         } else if (detail.status === 'غياب') {
                             dayStatusText = 'غايب';
