@@ -122,7 +122,7 @@
     </div>
 
     <script>
-        const API_URL = 'https://script.google.com/macros/s/AKfycbz53GPjaGGL43cGd3GxF9Y8xmxsnkGzy35uSfnyJCNlFlIXpNR0MqgsDrI28NtDDt4R/exec';
+        const API_URL = 'https://script.google.com/macros/s/AKfycbwcHrtDCW_NhTtFYnzXp8QmcndXuDRVsZ7T2BIHwIw/dev';
 
         let currentTabCategory = "كل البيانات";
         let chartInstance = null;
@@ -166,73 +166,101 @@
             script.id = 'jsonp-script';
             script.src = `${API_URL}?prefix=${callbackName}`;
             script.onerror = function() {
-                showError('تعذر جلب البيانات.');
+                showError('تعذر جلب البيانات. تأكد من تسجيل الدخول بحساب Google إذا كنت تستخدم رابط /dev.');
                 document.getElementById('last-updated').innerHTML = `<i class="fa-solid fa-circle-exclamation text-red-400 me-1"></i> خطأ التحميل`;
             };
             document.body.appendChild(script);
         }
 
-        function getRawString(val) {
-            if (val === undefined || val === null || val === 'NaN') return '0';
-            let str = String(val).trim();
-            if (str.includes('T')) {
-                const parts = str.split('T')[1].split('.')[0].split(':');
-                if (parts.length >= 2) return `${parseInt(parts[0], 10)}:${parts[1]}`;
-            }
-            return str;
-        }
+        function convertToSeconds(valStr) {
+            if (!valStr || valStr === 'NaN' || valStr === '-' || valStr === '0') return 0;
+            const str = String(valStr).trim();
 
-        function parseHeaderDateCorrectly(rawDayVal) {
-            if (!rawDayVal) return null;
-            let str = String(rawDayVal).trim().split('T')[0];
-            const parts = str.match(/\d+/g);
-
-            if (!parts || parts.length < 3) return str;
-
-            let year, month, day;
-
-            if (parts[0].length === 4) {
-                year = parts[0];
-                month = parts[1].padStart(2, '0');
-                day = parts[2].padStart(2, '0');
-            } else {
-                let p1 = parseInt(parts[0], 10);
-                let p2 = parseInt(parts[1], 10);
-                year = parts[2].length === 2 ? '20' + parts[2] : parts[2];
-
-                if (p1 > 12) {
-                    day = String(p1).padStart(2, '0');
-                    month = String(p2).padStart(2, '0');
-                } else if (p2 > 12) {
-                    day = String(p2).padStart(2, '0');
-                    month = String(p1).padStart(2, '0');
-                } else {
-                    day = String(p1).padStart(2, '0');
-                    month = String(p2).padStart(2, '0');
+            if (str.includes('T') && str.includes('Z')) {
+                const dateObj = new Date(str);
+                if (!isNaN(dateObj.getTime())) {
+                    const hours = dateObj.getUTCHours();
+                    const minutes = dateObj.getUTCMinutes();
+                    const seconds = dateObj.getUTCSeconds();
+                    const totalSec = (hours * 3600) + (minutes * 60) + seconds;
+                    if (totalSec > 0) return totalSec;
                 }
+                return 0;
             }
 
-            return `${day}/${month}/${year}`;
+            if (str.includes(':')) {
+                const parts = str.split(':').map(p => parseFloat(p) || 0);
+                if (parts.length === 3) return (parts[0] * 3600) + (parts[1] * 60) + parts[2];
+                if (parts.length === 2) return (parts[0] * 3600) + (parts[1] * 60);
+            }
+
+            const num = parseFloat(str);
+            if (!isNaN(num) && num > 0) {
+                if (num < 1) return Math.round(num * 86400);
+                if (num <= 24) return Math.round(num * 3600);
+            }
+            return 0;
         }
 
         function parsePerformanceSheetData(rows) {
             if (!rows || rows.length < 3) return;
 
+            const headers = rows[0].map(h => String(h || '').trim());
             const dayRow = rows[1];
+
+            let riderIdIdx = headers.findIndex(c => c.toLowerCase().includes('rider id') || c.includes('كود'));
+            let riderNameIdx = headers.findIndex(c => c.toLowerCase().includes('rider name') || c.includes('اسم المندوب') || c.includes('الاسم'));
+            let zoneIdx = headers.findIndex(c => c.toLowerCase().includes('zone') || c.includes('منطقة'));
+            let supervisorIdx = headers.findIndex(c => c.includes('المشرف') || c.toLowerCase().includes('supervisor'));
+            let totalHoursIdx = headers.findIndex(c => c.includes('إجمالي الساعات') || c.includes('اجمالي الساعات') || c.toLowerCase().includes('total hours'));
+
+            if (riderIdIdx === -1) riderIdIdx = 0;
+            if (riderNameIdx === -1) riderNameIdx = 1;
+            if (zoneIdx === -1) zoneIdx = 2;
+            if (supervisorIdx === -1) supervisorIdx = 3;
 
             const DAY_COL_START = 4;
             const DAY_COL_END = 34;
-            const AM_COL_INDEX = 38;
 
             let validDayCols = [];
             const dayColLabelMap = new Map();
 
             for (let i = DAY_COL_START; i <= DAY_COL_END; i++) {
+                if (i === totalHoursIdx) continue;
                 let rawDayVal = (dayRow && dayRow[i] !== undefined) ? String(dayRow[i]).trim() : '';
 
                 if (rawDayVal !== '' && rawDayVal.toLowerCase() !== 'nan') {
-                    const formattedDay = parseHeaderDateCorrectly(rawDayVal);
-                    if (formattedDay) {
+                    let dayNum = null;
+                    let monthNum = 9;
+                    let yearNum = 2026;
+
+                    // تحليل النص مباشرة دون تحويل لـ Date لتفادي مشكلة Timezone Offset
+                    const cleanStr = rawDayVal.split('T')[0]; // أخذ جزء التاريخ فقط YYYY-MM-DD
+                    const parts = cleanStr.match(/\d+/g);
+
+                    if (parts && parts.length >= 3) {
+                        // صيغة YYYY-MM-DD أو M/D/YYYY
+                        if (parts[0].length === 4) { // 2026-09-01
+                            yearNum = parseInt(parts[0], 10);
+                            monthNum = parseInt(parts[1], 10);
+                            dayNum = parseInt(parts[2], 10);
+                        } else { // 9/1/2026
+                            monthNum = parseInt(parts[0], 10);
+                            dayNum = parseInt(parts[1], 10);
+                            yearNum = parseInt(parts[2], 10);
+                        }
+                    } else if (parts && parts.length === 2) {
+                        dayNum = parseInt(parts[1], 10);
+                        monthNum = parseInt(parts[0], 10);
+                    } else if (parts && parts.length === 1) {
+                        dayNum = parseInt(parts[0], 10);
+                    }
+
+                    // تجاهل أي تاريخ يقع في شهر أغسطس (08) لضمان نظافة القائمة
+                    if (monthNum === 8 || (dayNum === 31 && monthNum !== 9)) continue;
+
+                    if (dayNum && dayNum >= 1 && dayNum <= 31) {
+                        const formattedDay = `${String(dayNum).padStart(2, '0')}/${String(monthNum).padStart(2, '0')}/${yearNum}`;
                         validDayCols.push(i);
                         dayColLabelMap.set(i, formattedDay);
                     }
@@ -247,14 +275,14 @@
                 const row = rows[r];
                 if (!Array.isArray(row)) continue;
 
-                const riderId = row[0] !== undefined ? String(row[0]).trim() : '';
-                const riderName = row[1] !== undefined ? String(row[1]).trim() : '';
-                const zone = row[2] !== undefined ? String(row[2]).trim() : '';
-                const supervisor = row[3] !== undefined ? String(row[3]).trim() : '';
+                const riderId = row[riderIdIdx] !== undefined ? String(row[riderIdIdx]).trim() : '';
+                const riderName = row[riderNameIdx] !== undefined ? String(row[riderNameIdx]).trim() : '';
+                const zone = row[zoneIdx] !== undefined ? String(row[zoneIdx]).trim() : '';
+                const supervisor = row[supervisorIdx] !== undefined ? String(row[supervisorIdx]).trim() : '';
 
                 if ((!riderId && !riderName) || riderId.toLowerCase() === 'rider id') continue;
 
-                let workDays = 0, notWorkingDays = 0, absDays = 0, susDays = 0, notSelectedDays = 0;
+                let workDays = 0, notWorkingDays = 0, absDays = 0, susDays = 0, notSelectedDays = 0, totalHoursSec = 0;
                 const dayDetails = {};
 
                 validDayCols.forEach(i => {
@@ -262,6 +290,7 @@
                     const val = row[i] !== undefined ? String(row[i]).trim() : '';
 
                     let statusForDay = 'بدون بيانات';
+                    let hoursForDay = 0;
 
                     if (val && val !== 'NaN') {
                         if (val.includes('غياب')) {
@@ -277,16 +306,22 @@
                             notWorkingDays++;
                             statusForDay = 'مش مختار';
                         } else {
-                            workDays++;
-                            statusForDay = 'شغال';
+                            const sec = convertToSeconds(val);
+                            if (sec > 0) {
+                                workDays++;
+                                totalHoursSec += sec;
+                                statusForDay = 'شغال';
+                                hoursForDay = sec;
+                            }
                         }
                     }
 
-                    dayDetails[label] = { status: statusForDay, rawValue: val };
+                    dayDetails[label] = { status: statusForDay, hours: hoursForDay };
                 });
 
-                let rawAMVal = row[AM_COL_INDEX] !== undefined ? row[AM_COL_INDEX] : '0';
-                let displayTotalHours = getRawString(rawAMVal);
+                const totalMinsTotal = Math.round(totalHoursSec / 60);
+                const hours = Math.floor(totalMinsTotal / 60);
+                const mins = totalMinsTotal % 60;
 
                 parsedData.push({
                     "كود المندوب": riderId,
@@ -295,7 +330,8 @@
                     "المشرف": supervisor,
                     "أيام العمل": workDays,
                     "أيام عدم العمل": notWorkingDays,
-                    "إجمالي الساعات": displayTotalHours,
+                    "إجمالي الساعات": `${hours}:${mins < 10 ? '0' : ''}${mins}`,
+                    "ساعات بالثواني": totalHoursSec,
                     "الغياب": absDays,
                     "الإيقاف": susDays,
                     "مش مختار": notSelectedDays,
@@ -315,6 +351,7 @@
                 if (item["الإيقاف"] > 0) rawData["موقوف"].push(item);
                 if (item["الغياب"] > 0) rawData["غياب متكرر"].push(item);
                 if (item["أيام العمل"] === 1 || item["أيام العمل"] === 2) rawData["أيام عمل قليلة (1-2)"].push(item);
+                if (item["أيام العمل"] > 2 && item["ساعات بالثواني"] < (item["أيام العمل"] * 6 * 3600)) rawData["أداء ضعيف (ساعات قليلة)"].push(item);
             });
 
             updateKPIs();
@@ -429,7 +466,10 @@
                     const detail = item["تفاصيل الأيام"] ? item["تفاصيل الأيام"][dayVal] : null;
                     if (detail) {
                         if (detail.status === 'شغال') {
-                            dayStatusText = `شغال (${getRawString(detail.rawValue)})`;
+                            const mins = Math.round(detail.hours / 60);
+                            const h = Math.floor(mins / 60);
+                            const m = mins % 60;
+                            dayStatusText = `شغال (${h}:${m < 10 ? '0' : ''}${m})`;
                             dayStatusClass = 'text-emerald-400 font-bold';
                         } else if (detail.status === 'غياب') {
                             dayStatusText = 'غايب';
