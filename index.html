@@ -176,7 +176,17 @@
             if (!valStr || valStr === 'NaN' || valStr === '-' || valStr === '0') return 0;
             const str = String(valStr).trim();
 
-            if (str.includes('T') && str.includes('Z')) return 0;
+            if (str.includes('T') && str.includes('Z')) {
+                const dateObj = new Date(str);
+                if (!isNaN(dateObj.getTime())) {
+                    const hours = dateObj.getUTCHours();
+                    const minutes = dateObj.getUTCMinutes();
+                    const seconds = dateObj.getUTCSeconds();
+                    const totalSec = (hours * 3600) + (minutes * 60) + seconds;
+                    if (totalSec > 0) return totalSec;
+                }
+                return 0;
+            }
 
             if (str.includes(':')) {
                 const parts = str.split(':').map(p => parseFloat(p) || 0);
@@ -185,9 +195,9 @@
             }
 
             const num = parseFloat(str);
-            if (!isNaN(num) && num > 0 && num < 100) {
+            if (!isNaN(num) && num > 0) {
                 if (num < 1) return Math.round(num * 86400);
-                return Math.round(num * 3600);
+                if (num <= 24) return Math.round(num * 3600);
             }
             return 0;
         }
@@ -223,8 +233,8 @@
                     if (rawDayVal.includes('T')) {
                         const dateObj = new Date(rawDayVal);
                         if (!isNaN(dateObj.getTime())) {
-                            const day = String(dateObj.getDate()).padStart(2, '0');
-                            const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+                            const day = String(dateObj.getUTCDate()).padStart(2, '0');
+                            const month = String(dateObj.getUTCMonth() + 1).padStart(2, '0');
                             rawDayVal = `${day}/${month}`;
                         }
                     }
