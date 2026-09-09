@@ -38,10 +38,433 @@
             <div class="bg-slate-800 p-4 rounded-xl border border-slate-700">
                 <p class="text-slate-400 text-xs">مش شغال خالص</p>
                 <h3 id="kpi-1" class="text-2xl font-extrabold text-red-500 mt-1">0</h3>
-            Since you shared a direct web app link without any context or code, please let me know what you would like to do with it:
+            </div>
+            <div class="bg-slate-800 p-4 rounded-xl border border-slate-700">
+                <p class="text-slate-400 text-xs">مناديب موقوفين</p>
+                <h3 id="kpi-2" class="text-2xl font-extrabold text-orange-400 mt-1">0</h3>
+            </div>
+            <div class="bg-slate-800 p-4 rounded-xl border border-slate-700">
+                <p class="text-slate-400 text-xs">غياب متكرر</p>
+                <h3 id="kpi-3" class="text-2xl font-extrabold text-yellow-400 mt-1">0</h3>
+            </div>
+            <div class="bg-slate-800 p-4 rounded-xl border border-slate-700">
+                <p class="text-slate-400 text-xs">أيام عمل قليلة (1-2)</p>
+                <h3 id="kpi-4" class="text-2xl font-extrabold text-sky-400 mt-1">0</h3>
+            </div>
+            <div class="bg-slate-800 p-4 rounded-xl border border-slate-700">
+                <p class="text-slate-400 text-xs">أداء ضعيف (ساعات قليلة)</p>
+                <h3 id="kpi-5" class="text-2xl font-extrabold text-purple-400 mt-1">0</h3>
+            </div>
+        </div>
 
-* **Debugging or Code Help:** Are you facing an error or setting up a deployment trigger? If so, paste the underlying Google Apps Script code.
-* **API Integration:** Are you trying to fetch or send data to this Web App via `fetch()`, `curl`, Python, or another service?
-* **Access Issues:** If the link is returning a `403` or "Authorization Required" error, ensure the script deployment settings are set to **Execute as: Me** and **Who has access: Anyone**. 
+        <!-- الرسم البياني -->
+        <div class="bg-slate-800 p-5 rounded-xl border border-slate-700">
+            <h2 class="text-lg font-bold mb-4 text-slate-200"><i class="fa-solid fa-chart-pie me-2 text-amber-500"></i> توزيع الأداء والحالات</h2>
+            <div class="h-64 relative">
+                <canvas id="performanceChart"></canvas>
+            </div>
+        </div>
 
-How can I help you with this deployment?
+        <!-- الجدول الرئيسي -->
+        <div class="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
+            <div class="flex overflow-x-auto border-b border-slate-700 bg-slate-800/50 p-2 gap-2" id="category-tabs-container"></div>
+
+            <div class="p-4 bg-slate-800/80 border-b border-slate-700 flex flex-wrap gap-4 items-center justify-between">
+                <div class="relative flex-1 min-w-[240px]">
+                    <i class="fa-solid fa-magnifying-glass absolute right-3 top-3 text-slate-400"></i>
+                    <input type="text" id="search-input" placeholder="بحث باسم المندوب، الكود، المنطقة أو المشرف..." 
+                           class="w-full bg-slate-900 border border-slate-700 rounded-lg pr-9 pl-4 py-2 text-sm text-slate-100 focus:outline-none focus:border-amber-500">
+                </div>
+
+                <select id="zone-filter" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-amber-500">
+                    <option value="">كل المناطق</option>
+                </select>
+
+                <select id="day-filter" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-amber-500">
+                    <option value="">كل الشهر (بدون تحديد يوم)</option>
+                </select>
+
+                <select id="supervisor-filter" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-amber-500">
+                    <option value="">كل المشرفين</option>
+                </select>
+
+                <div class="text-xs text-slate-400">
+                    عدد السجلات: <span id="record-count" class="font-bold text-amber-400">0</span>
+                </div>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm text-right text-slate-300">
+                    <thead class="text-xs uppercase bg-slate-900/80 text-slate-400 border-b border-slate-700">
+                        <tr>
+                            <th class="px-4 py-3">RIDER ID</th>
+                            <th class="px-4 py-3">RIDER NAME</th>
+                            <th class="px-4 py-3">ZONE</th>
+                            <th class="px-4 py-3">اسم المشرف</th>
+                            <th class="px-4 py-3 text-center">أيام العمل</th>
+                            <th class="px-4 py-3 text-center">أيام عدم العمل</th>
+                            <th class="px-4 py-3 text-center">إجمالي الساعات</th>
+                            <th class="px-4 py-3 text-center">الغياب</th>
+                            <th class="px-4 py-3 text-center">الإيقاف</th>
+                            <th class="px-4 py-3 text-center text-slate-400">مش مختار</th>
+                            <th class="px-4 py-3 text-center text-amber-400">حالة اليوم المحدد</th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-body" class="divide-y divide-slate-700/50">
+                        <tr>
+                            <td colspan="11" class="text-center py-6 text-slate-400"><i class="fa-solid fa-spinner fa-spin me-2"></i> جاري تحميل بيانات المناديب...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // رابط التطوير الـ Dev الخاص بك
+        const API_URL = 'https://script.google.com/macros/s/AKfycbwcHrtDCW_NhTtFYnzXp8QmcndXuDRVsZ7T2BIHwIw/dev';
+
+        let currentTabCategory = "كل البيانات";
+        let chartInstance = null;
+
+        let rawData = {
+            "كل البيانات": [],
+            "مش شغال خالص": [],
+            "موقوف": [],
+            "غياب متكرر": [],
+            "أيام عمل قليلة (1-2)": [],
+            "أداء ضعيف (ساعات قليلة)": []
+        };
+        let dayLabelsList = [];
+
+        function hideError() { document.getElementById('error-banner').classList.add('hidden'); }
+        function showError(msg) {
+            document.getElementById('error-msg').innerText = msg;
+            document.getElementById('error-banner').classList.remove('hidden');
+        }
+
+        function loadSheetData() {
+            hideError();
+            document.getElementById('last-updated').innerHTML = `<i class="fa-solid fa-spinner fa-spin me-1"></i> جاري تحديث البيانات...`;
+
+            const callbackName = 'jsonp_cb_' + Math.floor(Math.random() * 1000000);
+
+            window[callbackName] = function(rows) {
+                delete window[callbackName];
+                const oldScript = document.getElementById('jsonp-script');
+                if (oldScript) oldScript.remove();
+
+                if (Array.isArray(rows) && rows.length > 2) {
+                    parsePerformanceSheetData(rows);
+                    document.getElementById('last-updated').innerHTML = `<i class="fa-regular fa-clock me-1"></i> آخر تحديث: ${new Date().toLocaleTimeString('ar-EG')}`;
+                } else {
+                    showError('البيانات المستلمة فارغة أو التنسيق غير صحيح.');
+                }
+            };
+
+            const script = document.createElement('script');
+            script.id = 'jsonp-script';
+            script.src = `${API_URL}?prefix=${callbackName}`;
+            script.onerror = function() {
+                showError('تعذر جلب البيانات. تأكد من تسجيل الدخول بحساب Google إذا كنت تستخدم رابط /dev.');
+                document.getElementById('last-updated').innerHTML = `<i class="fa-solid fa-circle-exclamation text-red-400 me-1"></i> خطأ التحميل`;
+            };
+            document.body.appendChild(script);
+        }
+
+        function convertToSeconds(valStr) {
+            if (!valStr || valStr === 'NaN' || valStr === '-' || valStr === '0') return 0;
+            const str = String(valStr).trim();
+            if (str.includes(':')) {
+                const parts = str.split(':').map(p => parseFloat(p) || 0);
+                if (parts.length === 3) return (parts[0] * 3600) + (parts[1] * 60) + parts[2];
+                if (parts.length === 2) return (parts[0] * 3600) + (parts[1] * 60);
+            }
+            const num = parseFloat(str);
+            if (!isNaN(num) && num > 0) {
+                if (num < 1) return Math.round(num * 86400);
+                return Math.round(num * 3600);
+            }
+            return 0;
+        }
+
+        function parsePerformanceSheetData(rows) {
+            if (!rows || rows.length < 3) return;
+
+            const headers = rows[0].map(h => String(h || '').trim());
+            const dayRow = rows[1];
+
+            let riderIdIdx = headers.findIndex(c => c.toLowerCase().includes('rider id') || c.includes('كود'));
+            let riderNameIdx = headers.findIndex(c => c.toLowerCase().includes('rider name') || c.includes('اسم المندوب') || c.includes('الاسم'));
+            let zoneIdx = headers.findIndex(c => c.toLowerCase().includes('zone') || c.includes('منطقة'));
+            let supervisorIdx = headers.findIndex(c => c.includes('المشرف') || c.toLowerCase().includes('supervisor'));
+            let totalHoursIdx = headers.findIndex(c => c.includes('إجمالي الساعات') || c.includes('اجمالي الساعات') || c.toLowerCase().includes('total hours'));
+
+            if (riderIdIdx === -1) riderIdIdx = 0;
+            if (riderNameIdx === -1) riderNameIdx = 1;
+            if (zoneIdx === -1) zoneIdx = 2;
+            if (supervisorIdx === -1) supervisorIdx = 3;
+
+            const DAY_COL_START = 4;
+            const DAY_COL_END = 34;
+
+            let validDayCols = [];
+            const dayColLabelMap = new Map();
+            for (let i = DAY_COL_START; i <= DAY_COL_END; i++) {
+                if (i === totalHoursIdx) continue;
+                const rawDayVal = (dayRow && dayRow[i] !== undefined) ? String(dayRow[i]).trim() : '';
+                if (rawDayVal !== '' && rawDayVal.toLowerCase() !== 'nan') {
+                    validDayCols.push(i);
+                    dayColLabelMap.set(i, rawDayVal);
+                }
+            }
+
+            dayLabelsList = validDayCols.map(i => dayColLabelMap.get(i));
+
+            let parsedData = [];
+
+            for (let r = 2; r < rows.length; r++) {
+                const row = rows[r];
+                if (!Array.isArray(row)) continue;
+
+                const riderId = row[riderIdIdx] !== undefined ? String(row[riderIdIdx]).trim() : '';
+                const riderName = row[riderNameIdx] !== undefined ? String(row[riderNameIdx]).trim() : '';
+                const zone = row[zoneIdx] !== undefined ? String(row[zoneIdx]).trim() : '';
+                const supervisor = row[supervisorIdx] !== undefined ? String(row[supervisorIdx]).trim() : '';
+
+                if ((!riderId && !riderName) || riderId.toLowerCase() === 'rider id') continue;
+
+                let workDays = 0, notWorkingDays = 0, absDays = 0, susDays = 0, notSelectedDays = 0, totalHoursSec = 0;
+                const dayDetails = {};
+
+                validDayCols.forEach(i => {
+                    const label = dayColLabelMap.get(i);
+                    const val = row[i] !== undefined ? String(row[i]).trim() : '';
+
+                    let statusForDay = 'بدون بيانات';
+                    let hoursForDay = 0;
+
+                    if (val && val !== 'NaN') {
+                        if (val.includes('غياب')) {
+                            absDays++;
+                            notWorkingDays++;
+                            statusForDay = 'غياب';
+                        } else if (val.includes('موقوف')) {
+                            susDays++;
+                            notWorkingDays++;
+                            statusForDay = 'موقوف';
+                        } else if (val.includes('مش مختار')) {
+                            notSelectedDays++;
+                            notWorkingDays++;
+                            statusForDay = 'مش مختار';
+                        } else {
+                            const sec = convertToSeconds(val);
+                            if (sec > 0) {
+                                workDays++;
+                                totalHoursSec += sec;
+                                statusForDay = 'شغال';
+                                hoursForDay = sec;
+                            }
+                        }
+                    }
+
+                    dayDetails[label] = { status: statusForDay, hours: hoursForDay };
+                });
+
+                const totalMinsTotal = Math.round(totalHoursSec / 60);
+                const hours = Math.floor(totalMinsTotal / 60);
+                const mins = totalMinsTotal % 60;
+
+                parsedData.push({
+                    "كود المندوب": riderId,
+                    "الاسم": riderName,
+                    "المنطقة": zone,
+                    "المشرف": supervisor,
+                    "أيام العمل": workDays,
+                    "أيام عدم العمل": notWorkingDays,
+                    "إجمالي الساعات": `${hours}:${mins < 10 ? '0' : ''}${mins}`,
+                    "ساعات بالثواني": totalHoursSec,
+                    "الغياب": absDays,
+                    "الإيقاف": susDays,
+                    "مش مختار": notSelectedDays,
+                    "تفاصيل الأيام": dayDetails
+                });
+            }
+
+            processPerformanceSheetData(parsedData);
+        }
+
+        function processPerformanceSheetData(items) {
+            Object.keys(rawData).forEach(key => rawData[key] = []);
+
+            items.forEach(item => {
+                rawData["كل البيانات"].push(item);
+                if (item["أيام العمل"] === 0) rawData["مش شغال خالص"].push(item);
+                if (item["الإيقاف"] > 0) rawData["موقوف"].push(item);
+                if (item["الغياب"] > 0) rawData["غياب متكرر"].push(item);
+                if (item["أيام العمل"] === 1 || item["أيام العمل"] === 2) rawData["أيام عمل قليلة (1-2)"].push(item);
+                if (item["أيام العمل"] > 2 && item["ساعات بالثواني"] < (item["أيام العمل"] * 6 * 3600)) rawData["أداء ضعيف (ساعات قليلة)"].push(item);
+            });
+
+            updateKPIs();
+            renderChart();
+            renderCategoryTabs();
+            populateFilterOptions();
+            renderPerformanceTable();
+        }
+
+        function populateFilterOptions() {
+            const allItems = rawData["كل البيانات"];
+
+            const zones = [...new Set(allItems.map(i => i["المنطقة"]).filter(Boolean))].sort();
+            const supervisors = [...new Set(allItems.map(i => i["المشرف"]).filter(Boolean))].sort();
+
+            const zoneSelect = document.getElementById('zone-filter');
+            const supervisorSelect = document.getElementById('supervisor-filter');
+            const daySelect = document.getElementById('day-filter');
+
+            zoneSelect.innerHTML = '<option value="">كل المناطق</option>' + zones.map(z => `<option value="${z}">${z}</option>`).join('');
+            supervisorSelect.innerHTML = '<option value="">كل المشرفين</option>' + supervisors.map(s => `<option value="${s}">${s}</option>`).join('');
+            daySelect.innerHTML = '<option value="">كل الشهر (بدون تحديد يوم)</option>' + dayLabelsList.map(d => `<option value="${d}">يوم ${d}</option>`).join('');
+        }
+
+        function updateKPIs() {
+            document.getElementById('kpi-1').innerText = rawData["مش شغال خالص"].length;
+            document.getElementById('kpi-2').innerText = rawData["موقوف"].length;
+            document.getElementById('kpi-3').innerText = rawData["غياب متكرر"].length;
+            document.getElementById('kpi-4').innerText = rawData["أيام عمل قليلة (1-2)"].length;
+            document.getElementById('kpi-5').innerText = rawData["أداء ضعيف (ساعات قليلة)"].length;
+        }
+
+        function renderChart() {
+            const ctx = document.getElementById('performanceChart').getContext('2d');
+            if (chartInstance) chartInstance.destroy();
+            const categories = ["مش شغال خالص", "موقوف", "غياب متكرر", "أيام عمل قليلة (1-2)", "أداء ضعيف (ساعات قليلة)"];
+
+            chartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: categories,
+                    datasets: [{
+                        label: 'عدد المناديب',
+                        data: categories.map(cat => rawData[cat].length),
+                        backgroundColor: ['rgba(239, 68, 68, 0.8)', 'rgba(251, 146, 60, 0.8)', 'rgba(250, 204, 21, 0.8)', 'rgba(56, 189, 248, 0.8)', 'rgba(192, 132, 252, 0.8)'],
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { ticks: { color: '#94a3b8' }, grid: { display: false } },
+                        y: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } }
+                    }
+                }
+            });
+        }
+
+        function renderCategoryTabs() {
+            const container = document.getElementById('category-tabs-container');
+            container.innerHTML = '';
+            Object.keys(rawData).forEach((categoryName) => {
+                const btn = document.createElement('button');
+                const isActive = categoryName === currentTabCategory;
+                btn.className = `px-4 py-2 text-sm font-semibold rounded-lg transition whitespace-nowrap ${isActive ? 'bg-amber-500 text-slate-900' : 'text-slate-400 hover:bg-slate-700 hover:text-slate-200'}`;
+                btn.innerText = `${categoryName} (${rawData[categoryName].length})`;
+                btn.onclick = () => {
+                    currentTabCategory = categoryName;
+                    renderCategoryTabs();
+                    renderPerformanceTable();
+                };
+                container.appendChild(btn);
+            });
+        }
+
+        function renderPerformanceTable() {
+            const tbody = document.getElementById('table-body');
+            const searchVal = document.getElementById('search-input').value.toLowerCase();
+            const zoneVal = document.getElementById('zone-filter').value;
+            const supervisorVal = document.getElementById('supervisor-filter').value;
+            const dayVal = document.getElementById('day-filter').value;
+
+            const list = rawData[currentTabCategory] || [];
+            const filteredData = list.filter(item => {
+                const matchesSearch = 
+                    String(item["كود المندوب"]).toLowerCase().includes(searchVal) ||
+                    String(item["الاسم"]).toLowerCase().includes(searchVal) ||
+                    String(item["المنطقة"]).toLowerCase().includes(searchVal) ||
+                    String(item["المشرف"]).toLowerCase().includes(searchVal);
+                const matchesZone = !zoneVal || item["المنطقة"] === zoneVal;
+                const matchesSupervisor = !supervisorVal || item["المشرف"] === supervisorVal;
+                return matchesSearch && matchesZone && matchesSupervisor;
+            });
+
+            document.getElementById('record-count').innerText = filteredData.length;
+            tbody.innerHTML = '';
+
+            if (filteredData.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="11" class="text-center py-6 text-slate-500">لا توجد بيانات مطابقة.</td></tr>`;
+                return;
+            }
+
+            filteredData.forEach(item => {
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-slate-700/30 transition border-b border-slate-700/40';
+
+                let dayStatusText = '-';
+                let dayStatusClass = 'text-slate-600';
+                if (dayVal) {
+                    const detail = item["تفاصيل الأيام"] ? item["تفاصيل الأيام"][dayVal] : null;
+                    if (detail) {
+                        if (detail.status === 'شغال') {
+                            const mins = Math.round(detail.hours / 60);
+                            const h = Math.floor(mins / 60);
+                            const m = mins % 60;
+                            dayStatusText = `شغال (${h}:${m < 10 ? '0' : ''}${m})`;
+                            dayStatusClass = 'text-emerald-400 font-bold';
+                        } else if (detail.status === 'غياب') {
+                            dayStatusText = 'غايب';
+                            dayStatusClass = 'text-yellow-400 font-bold';
+                        } else if (detail.status === 'موقوف') {
+                            dayStatusText = 'موقوف';
+                            dayStatusClass = 'text-orange-400 font-bold';
+                        } else if (detail.status === 'مش مختار') {
+                            dayStatusText = 'مش مختار';
+                            dayStatusClass = 'text-slate-400';
+                        } else {
+                            dayStatusText = 'بدون بيانات';
+                            dayStatusClass = 'text-slate-600';
+                        }
+                    } else {
+                        dayStatusText = 'بدون بيانات';
+                    }
+                }
+
+                tr.innerHTML = `
+                    <td class="px-4 py-3 font-mono text-amber-400">${item["كود المندوب"]}</td>
+                    <td class="px-4 py-3 font-medium text-slate-200">${item["الاسم"]}</td>
+                    <td class="px-4 py-3"><span class="bg-slate-700 text-slate-300 px-2 py-0.5 rounded text-xs">${item["المنطقة"]}</span></td>
+                    <td class="px-4 py-3 text-slate-400">${item["المشرف"]}</td>
+                    <td class="px-4 py-3 text-center font-bold text-slate-200">${item["أيام العمل"]}</td>
+                    <td class="px-4 py-3 text-center text-slate-400">${item["أيام عدم العمل"]}</td>
+                    <td class="px-4 py-3 text-center font-mono text-emerald-400 font-bold">${item["إجمالي الساعات"]}</td>
+                    <td class="px-4 py-3 text-center text-slate-300">${item["الغياب"]}</td>
+                    <td class="px-4 py-3 text-center text-slate-300">${item["الإيقاف"]}</td>
+                    <td class="px-4 py-3 text-center text-slate-400">${item["مش مختار"]}</td>
+                    <td class="px-4 py-3 text-center ${dayStatusClass}">${dayStatusText}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        document.getElementById('search-input').addEventListener('input', renderPerformanceTable);
+        document.getElementById('zone-filter').addEventListener('change', renderPerformanceTable);
+        document.getElementById('supervisor-filter').addEventListener('change', renderPerformanceTable);
+        document.getElementById('day-filter').addEventListener('change', renderPerformanceTable);
+
+        loadSheetData();
+    </script>
+</body>
+</html>
