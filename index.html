@@ -103,7 +103,7 @@
                             <th class="px-4 py-3">اسم المشرف</th>
                             <th class="px-4 py-3 text-center">أيام العمل</th>
                             <th class="px-4 py-3 text-center">أيام عدم العمل</th>
-                            <th class="px-4 py-3 text-center">إجمالي الساعات (AM)</th>
+                            <th class="px-4 py-3 text-center">إجمالي الساعات</th>
                             <th class="px-4 py-3 text-center">الغياب</th>
                             <th class="px-4 py-3 text-center">الإيقاف</th>
                             <th class="px-4 py-3 text-center text-slate-400">مش مختار</th>
@@ -172,12 +172,11 @@
             document.body.appendChild(script);
         }
 
-        // دالة تحويل نصوص الساعات المعقدة والتاريخ لتنسيق الوقت السليم
+        // دالة تنظيف وتنسيق الساعات النصية مباشرة بدون تحويلات تاريخ
         function cleanTimeFormat(valStr) {
             if (!valStr || valStr === 'NaN' || valStr === '-' || valStr === '0') return '00:00';
             const str = String(valStr).trim();
 
-            // التعامل مع القيمة لو كانت جاية كـ Date string من الشيت
             if (str.includes('T')) {
                 const timePart = str.split('T')[1];
                 if (timePart) {
@@ -185,8 +184,6 @@
                     if (cleanParts.length >= 2) {
                         let hours = parseInt(cleanParts[0], 10) || 0;
                         let mins = parseInt(cleanParts[1], 10) || 0;
-
-                        // معالجة الأيام الزائدة لو القيمة اتجاوزت 24 ساعة
                         const datePart = str.split('T')[0];
                         if (datePart.startsWith('1899-12-31')) hours += 24;
                         else if (datePart.startsWith('1900-01-01')) hours += 48;
@@ -197,7 +194,6 @@
                 }
             }
 
-            // لو النص عادي بتنسيق HH:MM أو HH:MM:SS
             if (str.includes(':')) {
                 const parts = str.split(':');
                 if (parts.length >= 2) {
@@ -208,10 +204,37 @@
             return str;
         }
 
+        // دالة تنسيق التاريخ بمرونة وقراءته من رأس الشيت مباشرة
+        function formatHeaderDate(rawVal) {
+            if (!rawVal) return '';
+            let str = String(rawVal).trim();
+
+            if (str.includes('T')) {
+                str = str.split('T')[0];
+            }
+
+            const parts = str.match(/\d+/g);
+            if (parts && parts.length >= 3) {
+                let y, m, d;
+                if (parts[0].length === 4) {
+                    y = parts[0];
+                    m = parts[1].padStart(2, '0');
+                    d = parts[2].padStart(2, '0');
+                } else {
+                    m = parts[0].padStart(2, '0');
+                    d = parts[1].padStart(2, '0');
+                    y = parts[2].length === 2 ? '20' + parts[2] : parts[2];
+                }
+                return `${d}/${m}/${y}`;
+            }
+
+            return str;
+        }
+
         function parsePerformanceSheetData(rows) {
             if (!rows || rows.length < 3) return;
 
-            const dayRow = rows[1]; // الصف رقم 2
+            const dayRow = rows[1]; // الصف الثاني في الشيت
 
             const DAY_COL_START = 4;  // Column E
             const DAY_COL_END = 34;   // Column AI
@@ -220,37 +243,12 @@
             let validDayCols = [];
             const dayColLabelMap = new Map();
 
-            // قراءة التواريخ من الصف الثاني من E إلى AI
             for (let i = DAY_COL_START; i <= DAY_COL_END; i++) {
                 let rawDayVal = (dayRow && dayRow[i] !== undefined) ? String(dayRow[i]).trim() : '';
 
                 if (rawDayVal !== '' && rawDayVal.toLowerCase() !== 'nan') {
-                    let dayNum = null;
-                    let monthNum = 9;
-                    let yearNum = 2026;
-
-                    const cleanStr = rawDayVal.split('T')[0];
-                    const parts = cleanStr.match(/\d+/g);
-
-                    if (parts && parts.length >= 3) {
-                        if (parts[0].length === 4) {
-                            yearNum = parseInt(parts[0], 10);
-                            monthNum = parseInt(parts[1], 10);
-                            dayNum = parseInt(parts[2], 10);
-                        } else {
-                            monthNum = parseInt(parts[0], 10);
-                            dayNum = parseInt(parts[1], 10);
-                            yearNum = parseInt(parts[2], 10);
-                        }
-                    } else if (parts && parts.length === 2) {
-                        dayNum = parseInt(parts[1], 10);
-                        monthNum = parseInt(parts[0], 10);
-                    } else if (parts && parts.length === 1) {
-                        dayNum = parseInt(parts[0], 10);
-                    }
-
-                    if (dayNum && dayNum >= 1 && dayNum <= 30 && monthNum === 9) {
-                        const formattedDay = `${String(dayNum).padStart(2, '0')}/${String(monthNum).padStart(2, '0')}/${yearNum}`;
+                    const formattedDay = formatHeaderDate(rawDayVal);
+                    if (formattedDay) {
                         validDayCols.push(i);
                         dayColLabelMap.set(i, formattedDay);
                     }
@@ -303,7 +301,6 @@
                     dayDetails[label] = { status: statusForDay, rawValue: val };
                 });
 
-                // قراءة القيمة من العمود AM وتنظيف صيغة الوقت فوراً
                 let rawAMVal = row[AM_COL_INDEX] !== undefined ? String(row[AM_COL_INDEX]).trim() : '';
                 let displayTotalHours = cleanTimeFormat(rawAMVal);
 
