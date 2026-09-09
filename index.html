@@ -122,7 +122,6 @@
     </div>
 
     <script>
-        // رابط التطوير الـ Dev الخاص بك
         const API_URL = 'https://script.google.com/macros/s/AKfycbwcHrtDCW_NhTtFYnzXp8QmcndXuDRVsZ7T2BIHwIw/dev';
 
         let currentTabCategory = "كل البيانات";
@@ -176,13 +175,17 @@
         function convertToSeconds(valStr) {
             if (!valStr || valStr === 'NaN' || valStr === '-' || valStr === '0') return 0;
             const str = String(valStr).trim();
+
+            if (str.includes('T') && str.includes('Z')) return 0;
+
             if (str.includes(':')) {
                 const parts = str.split(':').map(p => parseFloat(p) || 0);
                 if (parts.length === 3) return (parts[0] * 3600) + (parts[1] * 60) + parts[2];
                 if (parts.length === 2) return (parts[0] * 3600) + (parts[1] * 60);
             }
+
             const num = parseFloat(str);
-            if (!isNaN(num) && num > 0) {
+            if (!isNaN(num) && num > 0 && num < 100) {
                 if (num < 1) return Math.round(num * 86400);
                 return Math.round(num * 3600);
             }
@@ -211,10 +214,20 @@
 
             let validDayCols = [];
             const dayColLabelMap = new Map();
+
             for (let i = DAY_COL_START; i <= DAY_COL_END; i++) {
                 if (i === totalHoursIdx) continue;
-                const rawDayVal = (dayRow && dayRow[i] !== undefined) ? String(dayRow[i]).trim() : '';
+                let rawDayVal = (dayRow && dayRow[i] !== undefined) ? String(dayRow[i]).trim() : '';
+
                 if (rawDayVal !== '' && rawDayVal.toLowerCase() !== 'nan') {
+                    if (rawDayVal.includes('T')) {
+                        const dateObj = new Date(rawDayVal);
+                        if (!isNaN(dateObj.getTime())) {
+                            const day = String(dateObj.getDate()).padStart(2, '0');
+                            const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+                            rawDayVal = `${day}/${month}`;
+                        }
+                    }
                     validDayCols.push(i);
                     dayColLabelMap.set(i, rawDayVal);
                 }
