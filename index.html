@@ -182,23 +182,33 @@
             return str;
         }
 
+        // تحويل التاريخ مع حل مشكلة التوقيت الزمني UTC Timezone Offset
         function parseHeaderDateCorrectly(rawDayVal) {
             if (!rawDayVal) return null;
-            let str = String(rawDayVal).trim().split('T')[0];
-            const parts = str.match(/\d+/g);
+            let str = String(rawDayVal).trim();
 
+            if (str.includes('T')) {
+                let dateObj = new Date(str);
+                if (!isNaN(dateObj.getTime())) {
+                    let day = String(dateObj.getDate()).padStart(2, '0');
+                    let month = String(dateObj.getMonth() + 1).padStart(2, '0');
+                    let year = dateObj.getFullYear();
+                    return `${day}/${month}/${year}`;
+                }
+            }
+
+            const parts = str.split('T')[0].match(/\d+/g);
             if (!parts || parts.length < 3) return str;
 
-            let year, month, day;
-
+            let day, month, year;
             if (parts[0].length === 4) {
                 year = parts[0];
                 month = parts[1].padStart(2, '0');
                 day = parts[2].padStart(2, '0');
             } else {
+                year = parts[2].length === 2 ? '20' + parts[2] : parts[2];
                 let p1 = parseInt(parts[0], 10);
                 let p2 = parseInt(parts[1], 10);
-                year = parts[2].length === 2 ? '20' + parts[2] : parts[2];
 
                 if (p1 > 12) {
                     day = String(p1).padStart(2, '0');
