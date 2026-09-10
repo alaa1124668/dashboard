@@ -172,13 +172,38 @@
             document.body.appendChild(script);
         }
 
+        // دالة جديدة ودقيقة لتحويل كافة أشكال الساعات والقيم القادمة من جوجل شيت
         function getRawString(val) {
-            if (val === undefined || val === null || val === 'NaN') return '0';
+            if (val === undefined || val === null || val === 'NaN' || val === '') return '0:00';
+
             let str = String(val).trim();
+
+            // 1. لو القيمة تاريخ ISO قادم من Apps Script (مثل: 1899-12-30T05:30:00.000Z)
             if (str.includes('T')) {
-                const parts = str.split('T')[1].split('.')[0].split(':');
-                if (parts.length >= 2) return `${parseInt(parts[0], 10)}:${parts[1]}`;
+                let dateObj = new Date(str);
+                if (!isNaN(dateObj.getTime())) {
+                    let hours = String(dateObj.getUTCHours()).padStart(2, '0');
+                    let minutes = String(dateObj.getUTCMinutes()).padStart(2, '0');
+                    return `${hours}:${minutes}`;
+                }
             }
+
+            // 2. لو القيمة رقم عشري صادر كنسبة من اليوم (مثل: 0.25 = 6 ساعات)
+            if (!isNaN(str) && !str.includes(':')) {
+                let totalMinutes = Math.round(parseFloat(str) * 24 * 60);
+                let hours = Math.floor(totalMinutes / 60);
+                let minutes = totalMinutes % 60;
+                return `${hours}:${String(minutes).padStart(2, '0')}`;
+            }
+
+            // 3. لو الوقت مكتوب بتنسيق HH:MM أو HH:MM:SS جاهز
+            if (str.includes(':')) {
+                let parts = str.split(':');
+                let hours = parts[0].padStart(2, '0');
+                let minutes = parts[1].padStart(2, '0');
+                return `${hours}:${minutes}`;
+            }
+
             return str;
         }
 
