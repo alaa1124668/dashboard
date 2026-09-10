@@ -172,23 +172,33 @@
             document.body.appendChild(script);
         }
 
-        // دالة جديدة ودقيقة لتحويل كافة أشكال الساعات والقيم القادمة من جوجل شيت
+        // دالة معالجة الساعات واحتساب الزيادة عن 24 ساعة بدقة
         function getRawString(val) {
             if (val === undefined || val === null || val === 'NaN' || val === '') return '0:00';
 
             let str = String(val).trim();
 
-            // 1. لو القيمة تاريخ ISO قادم من Apps Script (مثل: 1899-12-30T05:30:00.000Z)
+            // 1. لو القيمة تاريخ ISO صادر من Google Apps Script
             if (str.includes('T')) {
                 let dateObj = new Date(str);
                 if (!isNaN(dateObj.getTime())) {
+                    let baseDate = new Date(Date.UTC(1899, 11, 30, 0, 0, 0));
+                    let diffMs = dateObj.getTime() - baseDate.getTime();
+                    
+                    let totalMinutes = Math.floor(diffMs / (1000 * 60));
+                    if (totalMinutes > 0) {
+                        let hours = Math.floor(totalMinutes / 60);
+                        let minutes = totalMinutes % 60;
+                        return `${hours}:${String(minutes).padStart(2, '0')}`;
+                    }
+                    
                     let hours = String(dateObj.getUTCHours()).padStart(2, '0');
                     let minutes = String(dateObj.getUTCMinutes()).padStart(2, '0');
                     return `${hours}:${minutes}`;
                 }
             }
 
-            // 2. لو القيمة رقم عشري صادر كنسبة من اليوم (مثل: 0.25 = 6 ساعات)
+            // 2. لو القيمة رقم عشري (مثلاً 1.5 يوم = 36 ساعة)
             if (!isNaN(str) && !str.includes(':')) {
                 let totalMinutes = Math.round(parseFloat(str) * 24 * 60);
                 let hours = Math.floor(totalMinutes / 60);
@@ -196,10 +206,10 @@
                 return `${hours}:${String(minutes).padStart(2, '0')}`;
             }
 
-            // 3. لو الوقت مكتوب بتنسيق HH:MM أو HH:MM:SS جاهز
+            // 3. لو الوقت نص HH:MM
             if (str.includes(':')) {
                 let parts = str.split(':');
-                let hours = parts[0].padStart(2, '0');
+                let hours = parts[0];
                 let minutes = parts[1].padStart(2, '0');
                 return `${hours}:${minutes}`;
             }
@@ -404,7 +414,7 @@
                     plugins: { legend: { display: false } },
                     scales: {
                         x: { ticks: { color: '#94a3b8' }, grid: { display: false } },
-                        y: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } }
+                        y: { ticks: { color: '#334155' } }
                     }
                 }
             });
